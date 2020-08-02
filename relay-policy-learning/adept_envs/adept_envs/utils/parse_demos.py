@@ -190,11 +190,12 @@ def main(env, demo_dir, skip, graph, save_logs, view, render):
 
         # render logs to video
         if view == 'render':
-            render_demos(
-                gym_env,
-                data,
-                filename=data['logName'][:-4] + '_demo_render.mp4',
-                render=render)
+            pass
+            # render_demos(
+            #     gym_env,
+            #     data,
+            #     filename=data['logName'][:-4] + '_demo_render.mp4',
+            #     render=render)
 
         # playback logs and gather data
         elif view == 'playback':
