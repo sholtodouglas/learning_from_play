@@ -1,8 +1,8 @@
 # Goal is, make it easy to get play demos for tristan.
-import d4rl
-import gym
 
-env = gym.make('kitchen-partial-v0')
+import gym
+import adept_envs
+env = gym.make('kitchen_relax-v1')
 
 o = env.reset()
 env.render()

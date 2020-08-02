@@ -1,1 +1,5 @@
-/relay-policy-learning/kitchen_demos_multitask/*
+
+.ipynb_checkpoints
+.idea
+scatter.mp4
+/kitchen_demos_multitask/*
