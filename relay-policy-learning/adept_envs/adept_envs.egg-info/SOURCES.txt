@@ -1,0 +1,6 @@
+setup.py
+adept_envs.egg-info/PKG-INFO
+adept_envs.egg-info/SOURCES.txt
+adept_envs.egg-info/dependency_links.txt
+adept_envs.egg-info/requires.txt
+adept_envs.egg-info/top_level.txt

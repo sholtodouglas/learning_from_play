@@ -1,0 +1,7 @@
+
+.ipynb_checkpoints
+.idea
+scatter.mp4
+/kitchen_demos_multitask/*
+__pycache__
+config.py
