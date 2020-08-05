@@ -5,3 +5,5 @@ scatter.mp4
 /kitchen_demos_multitask/*
 __pycache__
 config.py
+/collected_data/*
+/data_collection/collected_data/*
