@@ -7,3 +7,6 @@ __pycache__
 config.py
 /collected_data/*
 /data_collection/collected_data/*
+/saved_models/*
+/.idea/*
+/__pycache__/*

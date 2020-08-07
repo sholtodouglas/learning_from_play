@@ -8,7 +8,7 @@ import shutil
 from tqdm import tqdm
 
 env = gym.make('pandaPlay-v0')
-#env.render(mode='human')
+env.render(mode='human')
 env.reset()
 
 open_gripper = np.array([0.04])
@@ -67,7 +67,7 @@ def take_to(env, position, offset = np.zeros(3)):
 
 def pick_to(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb):
     global which_object
-    times = np.array([0.33, 0.66, 1.0, 1.3, 2.0, 2.2]) + t
+    times = np.array([0.8, 0.95, 1.1, 1.3, 2.0, 2.2]) + t
     states = [go_above, descend, close, lift, take_to, go_above]
 
 
@@ -135,7 +135,7 @@ activities = [pick_to]#, push_directionally]
 
 play_len = 120
 
-for i in tqdm(range(0, 40)):
+for i in tqdm(range(0, 60)):
     o = env.reset()
     t = 0
 
