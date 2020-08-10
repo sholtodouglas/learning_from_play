@@ -28,9 +28,9 @@ def go_above(env, obj_number, offset = np.zeros(3)):
     current_position = env.panda.calc_actor_state()['pos']
     #current_orn = env.panda.calc_actor_state()['orn']
     viz_pos(desired_position)
-    difference = desired_position - current_position
+
     
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, open_gripper])
+    action = np.concatenate([desired_position , top_down_grip_ori, open_gripper])
     return action
 
 def descend_push(env, obj_number, offset = np.zeros(3)):
@@ -38,7 +38,7 @@ def descend_push(env, obj_number, offset = np.zeros(3)):
     current_position = env.panda.calc_actor_state()['pos']
     #current_orn = env.panda.calc_actor_state()['orn']
 
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
+    action = np.concatenate([desired_position , top_down_grip_ori, closed_gripper])
     return action
 
 
@@ -51,14 +51,14 @@ def descend(env, obj_number, offset = np.zeros(3)):
 
     #current_orn = p.getEulerFromQuaternion(env.panda.calc_actor_state()['orn'])
     viz_pos(desired_position)
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, open_gripper])
+    action = np.concatenate([desired_position , top_down_grip_ori, open_gripper])
     return action
 
 def close(env, obj_number, offset = np.zeros(3)):
     desired_position = env.panda.calc_environment_state()[obj_number]['pos']
     current_position = env.panda.calc_actor_state()['pos']
     #current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
+    action = np.concatenate([desired_position , top_down_grip_ori, closed_gripper])
     return action
 
 def lift(env, obj_number, offset = np.zeros(3)):
@@ -67,7 +67,7 @@ def lift(env, obj_number, offset = np.zeros(3)):
     current_position = env.panda.calc_actor_state()['pos']
     viz_pos(desired_position)
     #current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
+    action = np.concatenate([desired_position , top_down_grip_ori, closed_gripper])
     return action
 
 def take_to(env, position, offset = np.zeros(3)):
@@ -75,12 +75,12 @@ def take_to(env, position, offset = np.zeros(3)):
     current_position = env.panda.calc_actor_state()['pos']
     viz_pos(desired_position)
     #current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])*0.5
+    action = np.concatenate([desired_position , top_down_grip_ori, closed_gripper])*0.5
     return action
 
 
 
-def pick_to(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb):
+def pick_to(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
     global which_object
     times = np.array([0.7, 1.2, 1.4, 1.6, 2.0, 2.2]) + t
     #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
@@ -91,12 +91,12 @@ def pick_to(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb):
     goal = env.panda.goal
     goal[which_object*3:(which_object+1)*3] = take_to_pos
     env.panda.reset_goal_pos(goal)
-    data = peform_action(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb, times, states, goal=take_to_pos, obj_number=which_object)
+    data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=take_to_pos, obj_number=which_object)
     which_object = not which_object # flip which object we are playing with
     return data
 
 
-def peform_action(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb, times, states, goal=None, offset=np.zeros(3), obj_number=0):
+def peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=None, offset=np.zeros(3), obj_number=0):
     state_pointer = 0
     while (t < times[state_pointer]):
         if state_pointer == 4:
@@ -106,14 +106,19 @@ def peform_action(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb, times, state
         if not debugging:
             p.saveBullet(example_path + '/env_states/' + str(counter) + ".bullet")
         counter += 1  # little counter for saving the bullet states
-        o2, r, d, _ = env.step(action)
+
+        acts.append(action), obs.append(o['observation']), ags.append(
+            o['achieved_goal']), \
+        cagb.append(o['controllable_achieved_goal']), currentPoses.append(o['joints'])
+        o2, r, d, info = env.step(action)
+        targetPoses.append(info['target_poses'])
         print(o2['achieved_goal'][14:])
         if d:
             print('Env limits exceeded')
             return {'success':0, 't':t}
-        acts.append(action), obs.append(o['observation']), goals.append(o['desired_goal']), ags.append(
-            o2['achieved_goal']), \
-        cagb.append(o2['controllable_achieved_goal']), fpsb.append(o2['full_positional_state'])
+        # NOTE! This is different to how it is done in goal conditioned RL, the ag is from
+        # the same timestep because thats how we'll use it in LFP (and because its harder to do
+        # the rl style step reset in VR teleop.
         o = o2
 
         t += dt
@@ -133,8 +138,8 @@ dt = 0.04
 
 action_buff = []
 observation_buff = []
-desired_goals_buff = []
-achieved_goals_buff = []
+desired_currentPoses_buff = []
+achieved_currentPoses_buff = []
 controllable_achieved_goal_buff = []
 full_positional_state_buff = []
 
@@ -156,7 +161,7 @@ for i in tqdm(range(0, 60)):
     o = env.reset()
     t = 0
 
-    acts, obs, goals, ags, cagb, fpsb = [], [], [], [], [], []
+    acts, obs, currentPoses, ags, cagb, targetPoses = [], [], [], [], [], []
     example_path = base_path + str(demo_count)
     if not debugging:
         os.makedirs(example_path)
@@ -166,7 +171,7 @@ for i in tqdm(range(0, 60)):
     #pbar = tqdm(total=play_len)
     while(t < play_len):
         activity_choice = np.random.choice(len(activities))
-        result = activities[activity_choice](env, t, o, counter, acts,obs,goals,ags,cagb,fpsb)
+        result = activities[activity_choice](env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses)
         if not result['success']:
             break
         #pbar.update(result['t'] - t)
@@ -178,15 +183,13 @@ for i in tqdm(range(0, 60)):
     if t>(play_len/2): #reasonable length with some play interaction
         if not debugging:
 
-            action_buff.append(acts), observation_buff.append(obs), desired_goals_buff.append(
-                goals), achieved_goals_buff.append(ags), \
-            controllable_achieved_goal_buff.append(cagb), full_positional_state_buff.append(fpsb)
+            action_buff.append(acts), observation_buff.append(obs), desired_currentPoses_buff.append(
+                currentPoses), achieved_currentPoses_buff.append(ags), \
+            controllable_achieved_goal_buff.append(cagb), full_positional_state_buff.append(targetPoses)
 
             np.savez(base_path + str(demo_count) + '/data', acts=acts, obs=obs,
-                     desired_goals=goals,
-                     achieved_goals=ags,
-                     controllable_achieved_goals=cagb,
-                     full_positional_states=fpsb)
+                     achieved_currentPoses=ags,
+                     controllable_achieved_currentPoses=cagb, joint_poses=currentPoses, target_poses=targetPoses)
             demo_count += 1
     else:
         print('Demo failed')
@@ -204,7 +207,7 @@ for i in tqdm(range(0, 60)):
 
 
 #
-# def push_directionally(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb):
+# def push_directionally(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
 #     times = np.array([0.5, 1.0, 1.4]) + t
 #     states = [go_above, descend_push, go_above]
 #     # choose a random point in a circle around the block
@@ -214,4 +217,4 @@ for i in tqdm(range(0, 60)):
 #     offset = np.array([x,0,z])
 #
 #
-#     return peform_action(env, t, o, counter, acts, obs, goals, ags, cagb, fpsb, times, states, offset=offset)
+#     return peform_action(env, t, o, counter, acts, obs, currentPoses, ags, cagb, targetPoses, times, states, offset=offset)
