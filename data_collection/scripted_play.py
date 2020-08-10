@@ -16,58 +16,74 @@ closed_gripper = np.array([0.01])
 p = env.panda.bullet_client
 which_object = 0
 
+top_down_grip_ori = np.array(env.p.getQuaternionFromEuler([ np.pi, 0, 0]))
+
+def viz_pos(desired_position):
+    goal = np.ones(6)
+    goal[which_object * 3:(which_object + 1) * 3] = desired_position
+    env.panda.reset_goal_pos(goal)
 #--These two skills are used both in picking and pushing, use the offset to push by going next to
 def go_above(env, obj_number, offset = np.zeros(3)):
-    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, 0.05, 0]) + offset
+    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, 0.00, 0.1]) + offset
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), open_gripper])
+    #current_orn = env.panda.calc_actor_state()['orn']
+    viz_pos(desired_position)
+    difference = desired_position - current_position
+    
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, open_gripper])
     return action
 
 def descend_push(env, obj_number, offset = np.zeros(3)):
-    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, -0.05, 0]) + offset
+    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, 0,0.0]) + offset
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), closed_gripper])
-    return action
+    #current_orn = env.panda.calc_actor_state()['orn']
 
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
+    return action
 
 
 # Skills only used for picking
 def descend(env, obj_number, offset = np.zeros(3)):
-    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, -0.015, 0]) + offset
+    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + offset
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), open_gripper])
+    # descend slowly for the sake of the IK
+    desired_position[2] = max(desired_position[2], current_position[2] - 0.03)
+
+    #current_orn = p.getEulerFromQuaternion(env.panda.calc_actor_state()['orn'])
+    viz_pos(desired_position)
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, open_gripper])
     return action
 
 def close(env, obj_number, offset = np.zeros(3)):
     desired_position = env.panda.calc_environment_state()[obj_number]['pos']
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), closed_gripper])
+    #current_orn = env.panda.calc_actor_state()['orn']
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
     return action
 
 def lift(env, obj_number, offset = np.zeros(3)):
     desired_position = env.panda.calc_environment_state()[obj_number]['pos']
-    desired_position[1] +=  0.02
+    desired_position[2] +=  0.005
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), closed_gripper])
+    viz_pos(desired_position)
+    #current_orn = env.panda.calc_actor_state()['orn']
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])
     return action
 
 def take_to(env, position, offset = np.zeros(3)):
     desired_position = position
     current_position = env.panda.calc_actor_state()['pos']
-    current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position - current_position, np.array(env.panda.default_arm_orn)-np.array(current_orn), closed_gripper])*0.5
+    viz_pos(desired_position)
+    #current_orn = env.panda.calc_actor_state()['orn']
+    action = np.concatenate([desired_position - current_position, top_down_grip_ori, closed_gripper])*0.5
     return action
 
 
 
 def pick_to(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb):
     global which_object
-    times = np.array([0.8, 0.95, 1.1, 1.3, 2.0, 2.2]) + t
+    times = np.array([0.7, 1.2, 1.4, 1.6, 2.0, 2.2]) + t
+    #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
     states = [go_above, descend, close, lift, take_to, go_above]
 
 
@@ -91,6 +107,7 @@ def peform_action(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb, times, state
             p.saveBullet(example_path + '/env_states/' + str(counter) + ".bullet")
         counter += 1  # little counter for saving the bullet states
         o2, r, d, _ = env.step(action)
+        print(o2['achieved_goal'][14:])
         if d:
             print('Env limits exceeded')
             return {'success':0, 't':t}
@@ -110,7 +127,7 @@ def peform_action(env, t, o, counter, acts,obs,goals,ags,cagb,fpsb, times, state
 
 
 
-debugging = False
+debugging = True
 
 dt = 0.04
 
