@@ -112,7 +112,7 @@ def peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses
         cagb.append(o['controllable_achieved_goal']), currentPoses.append(o['joints'])
         o2, r, d, info = env.step(action)
         targetPoses.append(info['target_poses'])
-        print(o2['achieved_goal'][14:])
+        #print(o2['achieved_goal'][16:])
         if d:
             print('Env limits exceeded')
             return {'success':0, 't':t}

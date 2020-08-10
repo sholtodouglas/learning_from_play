@@ -12,7 +12,7 @@ import pandaRL
 import gym
 import os
 # p.connect(p.UDP,"192.168.86.100")
-
+import matplotlib.pyplot as plt
 
 
 # cid = p.connect(p.SHARED_MEMORY)
@@ -91,14 +91,14 @@ debugging = False
 
 example_path = base_path + str(demo_count)
 os.makedirs(example_path + '/env_states')
-
+os.makedirs(example_path + '/env_images')
 counter = 0
 control_frequency = 20 # Hz
 t0 = time.time()
 next_time = t0 + 1/control_frequency
 
 def do_command(t,t0):
-    #print(t-t0)
+    print(t-t0)
     #print(GRIPPER)
     targetPoses = env.panda.goto(POS, ORI, GRIPPER)
     return targetPoses
@@ -114,8 +114,7 @@ def save_stuff(env):
     acts.append(action), obs.append(state['observation']), ags.append(
         state['achieved_goal']), \
     cagb.append(state['controllable_achieved_goal']), joints.append(state['joints'])
-
-
+    # Saving images to expensive here, regen state! and saveimages there
 while not get_new_command():
     pass
 
