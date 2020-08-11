@@ -80,18 +80,29 @@ BUTTONS = 6
 
 
 base_path = 'collected_data/play_demos/'
+obs_act_path = base_path + 'obs_act_etc/'
+env_state_path = base_path + 'env_states/'
 try:
-    os.makedirs(base_path)
+    os.makedirs(obs_act_path)
 except:
-    print('Folder already exists')
+    pass
 
-demo_count = len(list(os.listdir(base_path)))
+try:
+    os.makedirs(env_state_path)
+except:
+    pass
+
+
+
+demo_count = len(list(os.listdir(obs_act_path)))
 
 debugging = False
 
-example_path = base_path + str(demo_count)
+example_path = env_state_path + str(demo_count)
+npz_path = obs_act_path+str(demo_count)
 os.makedirs(example_path + '/env_states')
 os.makedirs(example_path + '/env_images')
+os.makedirs(npz_path)
 counter = 0
 control_frequency = 20 # Hz
 t0 = time.time()
@@ -133,4 +144,4 @@ try:
 except:
     # finito and save
     print('Finito')
-    np.savez(base_path + str(demo_count) + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
+    np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
