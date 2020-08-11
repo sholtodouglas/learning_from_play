@@ -38,7 +38,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.5], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.0], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -81,7 +81,7 @@ BUTTONS = 6
 
 base_path = 'collected_data/play_demos/'
 obs_act_path = base_path + 'obs_act_etc/'
-env_state_path = base_path + 'env_states/'
+env_state_path = base_path + 'states_and_ims/'
 try:
     os.makedirs(obs_act_path)
 except:

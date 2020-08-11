@@ -178,7 +178,7 @@ def load_data(path, keys):
         reset_states = []
         for i in range(0, len(traj[keys[0]])):
             # these are needed for deterministic resetting
-            reset_states.append(path+'/env_states/'+demo+'/env_states/'+str(i)+'.bullet')
+            reset_states.append(path+'/states_and_ims/'+demo+'/env_states/'+str(i)+'.bullet')
         traj['reset_states'] = reset_states
         traj['reset_idx'] = int(demo)
         dataset.append(traj)
