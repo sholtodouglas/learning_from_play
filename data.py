@@ -169,14 +169,16 @@ class RobotSeqDataset():
 def load_data(path, keys):
     cnt = Counter()
     dataset = []
-    for demo in os.listdir(path):
+    obs_act_path = path+'obs_act_etc/'
+
+    for demo in os.listdir(obs_act_path):
         
-        traj = np.load(path+demo+'/data.npz')
+        traj = np.load(obs_act_path+demo+'/data.npz')
         traj = {key:traj[key] for key in keys}
         reset_states = []
         for i in range(0, len(traj[keys[0]])):
             # these are needed for deterministic resetting
-            reset_states.append(path+demo+'/env_states/'+str(i)+'.bullet')
+            reset_states.append(path+'/env_states/'+demo+'/env_states/'+str(i)+'.bullet')
         traj['reset_states'] = reset_states
         traj['reset_idx'] = int(demo)
         dataset.append(traj)
