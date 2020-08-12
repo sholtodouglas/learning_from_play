@@ -38,7 +38,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.0], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -0.9], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -82,6 +82,7 @@ BUTTONS = 6
 base_path = 'collected_data/play_demos/'
 obs_act_path = base_path + 'obs_act_etc/'
 env_state_path = base_path + 'states_and_ims/'
+print(obs_act_path)
 try:
     os.makedirs(obs_act_path)
 except:
@@ -100,9 +101,10 @@ debugging = False
 
 example_path = env_state_path + str(demo_count)
 npz_path = obs_act_path+str(demo_count)
-os.makedirs(example_path + '/env_states')
-os.makedirs(example_path + '/env_images')
-os.makedirs(npz_path)
+if not debugging:
+    os.makedirs(example_path + '/env_states')
+    os.makedirs(example_path + '/env_images')
+    os.makedirs(npz_path)
 counter = 0
 control_frequency = 20 # Hz
 t0 = time.time()
@@ -130,18 +132,32 @@ while not get_new_command():
     pass
 
 
+def save(npz_path):
+    print(npz_path)
+    if not debugging:
+        np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
+    print('Finito')
+
 try:
     while(1):
         get_new_command()
         t = time.time()
         if t >= next_time:
-            env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
+            if not debugging:
+                env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
             save_stuff(env)
             target = do_command(t,t0)
             targetJoints.append(target)
             next_time = next_time + 1/control_frequency
             counter += 1
+
+        if BUTTON == 1:
+            save(npz_path)
+            break
+
+
 except:
     # finito and save
-    print('Finito')
-    np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
+    save(npz_path)
+    
+    
