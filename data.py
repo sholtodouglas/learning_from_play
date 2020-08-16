@@ -58,118 +58,94 @@ def create_single_dataset(base_path='../relay-policy-learning'):
 
     return traj_dicts, cnt
 
-
-# IO function for reading pickle files - we return as the original dictionary
-def load_data(filename):
-    with open(filename.numpy(), 'rb') as f:
-        traj_dict = pickle.load(f)
-    return traj_dict['observations'], traj_dict['actions']
-
-# Probably don't need to preprocess for this data
-def prepro_data(trajectory):
-    pass
-
-def make_tf_dataset(base_path='../relay-policy-learning', batch_size=1, prefetch_size=None, n_threads=1):
-    filenames = base_path+"/kitchen_demos_multitask/*/*.pkl"
-
-    with tf.device('/cpu:0'):
-        dataset = tf.data.Dataset.list_files(filenames)
-        #     dataset = dataset.shuffle(len(filenames))
-        dataset = dataset.map(lambda filename: tf.py_function(load_data, [filename], [tf.float32, tf.float32]),
-                              num_parallel_calls=n_threads)
-        #     dataset = dataset.map(prepro_data, num_parallel_calls=4)
-        dataset = dataset.batch(batch_size, drop_remainder=True)  # do we want fixed or variable length sequences
-        #     dataset = dataset.window(30, shift=30, drop_remainder=True)
-        dataset = dataset.prefetch(prefetch_size)
-
-    return dataset
-
-
-
-class RobotSeqDataset():
-    def __init__(self, dataset, batch_size=64, seq_len=40, overlap=1.0, prefetch_size=None, train_test_split=0.8, seed=42):
+class PyBulletRobotSeqDataset():
+    def __init__(self, dataset, batch_size=64, seq_len=80, overlap=1.0, 
+                 prefetch_size=None, train_test_split=0.8, seed=42, relative_joints=False):
         self.N_TRAJS = len(dataset)
 
         # Split into train and validation datasets
         # List of trajectory dicts
-        self._train_data = dataset[:int(self.N_TRAJS*train_test_split)] # raw data - private
-        self._valid_data = dataset[int(self.N_TRAJS*train_test_split):]
+        if train_test_split == 'last': # just use the last set of demos as validation
+            self._train_data = dataset[:-1] # raw data - private
+            self._valid_data = dataset[-1:]
+        else:
+            self._train_data = dataset[:int(self.N_TRAJS*train_test_split)] # raw data - private
+            self._valid_data = dataset[int(self.N_TRAJS*train_test_split):]
         self.train_data = []
         self.valid_data = []
-
-        # Use the obs indices to get the full state of the env, both for us as obs, and for resetting.
-        self.START_OBS_IDX, self.END_OBS_IDX = 0,30
-        # Get just the dimensions of the goal for appending to the state
-        self.START_GOAL_IDX, self.END_GOAL_IDX = 9,30
-
         self.BATCH_SIZE = batch_size
         self.PREFETCH_SIZE = prefetch_size
         self.OVERLAP = overlap
+        self.relative_joints = relative_joints
 
-        self.SEQ_LEN = seq_len
-        self.OBS_DIM = 30
-        self.ACT_DIM = 9
+        self.MAX_SEQ_LEN = seq_len ## 40 for example
+        self.MIN_SEQ_LEN = seq_len // 2 # so like 20
+        self.OBS_DIM = dataset[0]['obs'].shape[-1]
+        if self.relative_joints:
+            self.ACT_DIM = dataset[0]['target_poses'].shape[-1] + 1 # +1 for the gripper
+        else:
+            self.ACT_DIM = dataset[0]['acts'].shape[-1]
+            
+        self.GOAL_DIM = dataset[0]['achieved_goals'].shape[-1] # 2 objects (xyz quat) + 4 uni dim = 18
 
         self.random_obj = random.Random(seed)
 
     def create_goal(self, trajectory, ti, tf):
-        return np.tile(trajectory['observations'][tf, self.START_GOAL_IDX:self.END_GOAL_IDX], (tf-ti,1))
+        return np.tile(trajectory['achieved_goals'][tf, :], (tf-ti,1))
 
-    def traj_to_subtrajs(self, trajectory):
+    def traj_to_subtrajs(self, trajectory, idx):
         """
         Converts a T-length trajectory into M subtrajectories of length SEQ_LEN, pads time dim to SEQ_LEN
         """
-        T = len(trajectory['observations'])
+        T = len(trajectory['obs'])
         subtrajs = []
-        window_size = int(self.SEQ_LEN*self.OVERLAP)
-        for ti in range(0,T,window_size):
-            tf = min(ti + self.SEQ_LEN, T-1) # Truncate subtrajs at the end of the trajectory
-            pad_len = self.SEQ_LEN-(tf-ti)
+        window_size = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
+        obs,goals,acts = [], [], []
+        for ti in range(0,T-window_size,window_size):
+            tf = ti + window_size
+                
+            pad_len = self.MAX_SEQ_LEN-(tf-ti)
             time_padding = ((0,pad_len),(0,0))
-            subtraj_dict = {
-                           'observations':np.pad(trajectory['observations'][ti:tf,self.START_OBS_IDX:self.END_OBS_IDX], time_padding)
-                            , 'actions':np.pad(trajectory['actions'][ti:tf], time_padding)
-                            , 'goals':np.pad(self.create_goal(trajectory, ti, tf), time_padding)
-                            , 'loss_mask': np.pad(np.ones(tf-ti), time_padding[0])
-                            , 'init_qpos':None # Just use obs
-                            , 'init_qvel':None # Todo: figure this out later - apparently velocities not used
-                            }
-            subtrajs.append(subtraj_dict)
-        return subtrajs
+            
+            if self.relative_joints:
+                rel = trajectory['target_poses'][ti:tf] - trajectory['joint_poses'][ti:tf, :7]
+                gripper = np.expand_dims(trajectory['acts'][ti:tf, -1], -1)
+                action = np.pad(np.concatenate([rel, gripper], -1), time_padding)
+            else:
+                action = np.pad(trajectory['acts'][ti:tf], time_padding)
+            
+            obs.append(np.pad(trajectory['obs'][ti:tf,:], time_padding))
+            goals.append(np.pad(self.create_goal(trajectory, ti, tf), time_padding))
+            acts.append(action)
+        return np.stack(obs), np.stack(goals), np.stack(acts)
 
-    def convert_dataset(self):
+    def create_tf_ds(self, is_training=True):
         """ Converts raw dataset to a shuffled subtraj dataset """
-        for train_sample in self._train_data:
-            self.train_data.extend(self.traj_to_subtrajs(train_sample))
-
-        for valid_sample in self._valid_data:
-            self.valid_data.extend(self.traj_to_subtrajs(valid_sample))
-
-    def create_tf_ds(self, ds_type='train'):
-        dataset = self.train_data if ds_type=='train' else self.valid_data
-        def gen():
-            for d in dataset:
-                yield (d['observations'], d['actions'], d['goals'], d['loss_mask'])
-
-        with tf.device('/cpu:0'):
-            tf_ds =  tf.data.Dataset.from_generator(
-                        gen
-                        , output_types = (tf.float32, tf.float32, tf.float32, tf.float32)
-                        , output_shapes = ((None,self.OBS_DIM), (None,self.ACT_DIM), (None,self.OBS_DIM-self.ACT_DIM), (None)
-            ))
-            tf_ds = tf_ds.shuffle(len(dataset))
-            tf_ds = tf_ds.batch(self.BATCH_SIZE, drop_remainder=True)
-            tf_ds = tf_ds.prefetch(self.PREFETCH_SIZE)
-        return tf_ds
-    
-    
+        dataset = self._train_data if is_training else self._valid_data
+        obs, goals, acts = [], [], []
+        for idx, train_sample in enumerate(dataset):
+            o,g,a = self.traj_to_subtrajs(train_sample, idx)
+            obs.append(o)
+            goals.append(g)
+            acts.append(a)
+        obs = np.vstack(obs)
+        goals = np.vstack(goals)
+        acts = np.vstack(acts).astype('float32')
+        
+        ds = tf.data.Dataset.from_tensor_slices(((obs, goals), acts))
+        ds = ds.shuffle(len(dataset))
+        ds = ds.repeat()
+        ds = ds.batch(self.BATCH_SIZE, drop_remainder=True)
+        ds = ds.prefetch(self.PREFETCH_SIZE)
+        # ds = ds.cache()
+        return ds
     
     
 ############## Everything from here for pybullet style #################################
 def load_data(path, keys):
     cnt = Counter()
     dataset = []
-    obs_act_path = path+'obs_act_etc/'
+    obs_act_path = os.path.join(path, 'obs_act_etc/')
 
     for demo in os.listdir(obs_act_path):
         
