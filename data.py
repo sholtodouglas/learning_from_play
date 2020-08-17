@@ -100,7 +100,7 @@ class PyBulletRobotSeqDataset():
         """
         T = len(trajectory['obs'])
         window_size = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
-        obs,goals,acts = [], [], []
+        obs, goals, acts, masks = [], [], [], []
         for ti in range(0,T-window_size,window_size):
             tf = ti + window_size
                 
@@ -117,22 +117,25 @@ class PyBulletRobotSeqDataset():
             obs.append(np.pad(trajectory['obs'][ti:tf,:], time_padding))
             goals.append(np.pad(self.create_goal(trajectory, ti, tf), time_padding))
             acts.append(action)
-        return np.stack(obs), np.stack(goals), np.stack(acts)
+            masks.append(np.pad(np.ones(tf-ti), time_padding[0]))
+        return np.stack(obs), np.stack(goals), np.stack(acts), np.stack(masks)
 
     def create_tf_ds(self, is_training=True):
         """ Converts raw dataset to a shuffled subtraj dataset """
         dataset = self._train_data if is_training else self._valid_data
-        obs, goals, acts = [], [], []
+        obs, goals, acts, masks = [], [], [], []
         for idx, train_sample in enumerate(dataset):
-            o,g,a = self.traj_to_subtrajs(train_sample, idx)
+            o,g,a,m = self.traj_to_subtrajs(train_sample, idx)
             obs.append(o)
             goals.append(g)
             acts.append(a)
+            masks.append(m)
         obs = np.vstack(obs)
         goals = np.vstack(goals)
         acts = np.vstack(acts).astype('float32')
+        masks = np.vstack(masks).astype('float32')
         
-        ds = tf.data.Dataset.from_tensor_slices(((obs, goals), acts))
+        ds = tf.data.Dataset.from_tensor_slices(((obs, goals), acts)) # gonna ignore masks
         # Always shuffle, repeat then batch (in that order)
         ds = ds.shuffle(len(obs))
         ds = ds.repeat()
