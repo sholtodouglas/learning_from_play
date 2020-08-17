@@ -6,6 +6,7 @@ import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
 import tensorflow as tf
+from tensorflow.data.experimental import AUTOTUNE
 import os
 import numpy as np
 
@@ -60,7 +61,7 @@ def create_single_dataset(base_path='../relay-policy-learning'):
 
 class PyBulletRobotSeqDataset():
     def __init__(self, dataset, batch_size=64, seq_len=80, overlap=1.0, 
-                 prefetch_size=None, train_test_split=0.8, seed=42, relative_joints=False):
+                 prefetch_size=AUTOTUNE, train_test_split=0.8, seed=42, relative_joints=False):
         self.N_TRAJS = len(dataset)
 
         # Split into train and validation datasets
@@ -98,7 +99,6 @@ class PyBulletRobotSeqDataset():
         Converts a T-length trajectory into M subtrajectories of length SEQ_LEN, pads time dim to SEQ_LEN
         """
         T = len(trajectory['obs'])
-        subtrajs = []
         window_size = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
         obs,goals,acts = [], [], []
         for ti in range(0,T-window_size,window_size):
@@ -133,6 +133,7 @@ class PyBulletRobotSeqDataset():
         acts = np.vstack(acts).astype('float32')
         
         ds = tf.data.Dataset.from_tensor_slices(((obs, goals), acts))
+        # Always shuffle, repeat then batch (in that order)
         ds = ds.shuffle(len(obs))
         ds = ds.repeat()
         ds = ds.batch(self.BATCH_SIZE, drop_remainder=True)
