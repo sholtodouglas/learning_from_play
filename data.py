@@ -133,7 +133,7 @@ class PyBulletRobotSeqDataset():
         acts = np.vstack(acts).astype('float32')
         
         ds = tf.data.Dataset.from_tensor_slices(((obs, goals), acts))
-        ds = ds.shuffle(len(dataset))
+        ds = ds.shuffle(len(obs))
         ds = ds.repeat()
         ds = ds.batch(self.BATCH_SIZE, drop_remainder=True)
         ds = ds.prefetch(self.PREFETCH_SIZE)
