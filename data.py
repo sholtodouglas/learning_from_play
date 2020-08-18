@@ -99,10 +99,11 @@ class PyBulletRobotSeqDataset():
         Converts a T-length trajectory into M subtrajectories of length SEQ_LEN, pads time dim to SEQ_LEN
         """
         T = len(trajectory['obs'])
-        window_size = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
+        frame_skip = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
         obs, goals, acts, masks = [], [], [], []
-        for ti in range(0,T-window_size,window_size):
-            tf = ti + window_size
+        for ti in range(0,T-self.MAX_SEQ_LEN,frame_skip):
+            seq_len = np.random.randint(self.MIN_SEQ_LEN,self.MAX_SEQ_LEN)
+            tf = ti + seq_len
                 
             pad_len = self.MAX_SEQ_LEN-(tf-ti)
             time_padding = ((0,pad_len),(0,0))
