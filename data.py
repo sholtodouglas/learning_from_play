@@ -61,7 +61,8 @@ def create_single_dataset(base_path='../relay-policy-learning'):
 
 class PyBulletRobotSeqDataset():
     def __init__(self, dataset, batch_size=64, seq_len=80, overlap=1.0, 
-                 prefetch_size=AUTOTUNE, train_test_split=0.8, seed=42, relative_joints=False):
+                 prefetch_size=AUTOTUNE, train_test_split=0.8, relative_joints=False, 
+                 variable_seqs=False, seed=42):
         self.N_TRAJS = len(dataset)
 
         # Split into train and validation datasets
@@ -78,6 +79,7 @@ class PyBulletRobotSeqDataset():
         self.PREFETCH_SIZE = prefetch_size
         self.OVERLAP = overlap
         self.relative_joints = relative_joints
+        self.variable_seqs = variable_seqs
 
         self.MAX_SEQ_LEN = seq_len ## 40 for example
         self.MIN_SEQ_LEN = seq_len // 2 # so like 20
@@ -102,7 +104,10 @@ class PyBulletRobotSeqDataset():
         frame_skip = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
         obs, goals, acts, masks = [], [], [], []
         for ti in range(0,T-self.MAX_SEQ_LEN,frame_skip):
-            seq_len = np.random.randint(self.MIN_SEQ_LEN,self.MAX_SEQ_LEN)
+            if self.variable_seqs:
+                seq_len = np.random.randint(self.MIN_SEQ_LEN,self.MAX_SEQ_LEN)
+            else:
+                seq_len = self.MAX_SEQ_LEN
             tf = ti + seq_len
                 
             pad_len = self.MAX_SEQ_LEN-(tf-ti)
