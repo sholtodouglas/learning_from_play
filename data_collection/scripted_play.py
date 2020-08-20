@@ -25,11 +25,6 @@ def viz_pos(desired_position):
 #--These two skills are used both in picking and pushing, use the offset to push by going next to
 def go_above(env, obj_number, offset = np.zeros(3)):
     desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, 0.00, 0.1]) + offset
-    current_position = env.panda.calc_actor_state()['pos']
-    #current_orn = env.panda.calc_actor_state()['orn']
-    viz_pos(desired_position)
-
-    
     action = np.concatenate([desired_position , top_down_grip_ori, open_gripper])
     return action
 
@@ -63,7 +58,7 @@ def close(env, obj_number, offset = np.zeros(3)):
 
 def lift(env, obj_number, offset = np.zeros(3)):
     desired_position = env.panda.calc_environment_state()[obj_number]['pos']
-    desired_position[2] +=  0.005
+    desired_position[2] +=  0.1
     current_position = env.panda.calc_actor_state()['pos']
     viz_pos(desired_position)
     #current_orn = env.panda.calc_actor_state()['orn']
@@ -73,16 +68,27 @@ def lift(env, obj_number, offset = np.zeros(3)):
 def take_to(env, position, offset = np.zeros(3)):
     desired_position = position
     current_position = env.panda.calc_actor_state()['pos']
+    delta = (desired_position - current_position)*0.2
     viz_pos(desired_position)
+
     #current_orn = env.panda.calc_actor_state()['orn']
-    action = np.concatenate([desired_position , top_down_grip_ori, closed_gripper])*0.5
+    action = np.concatenate([current_position+delta , top_down_grip_ori, closed_gripper])
     return action
 
+def reorient_obj(env, position, offset = np.zeros(3)):
+    desired_position = position
+    action = np.concatenate([desired_position, env.panda.default_arm_orn, closed_gripper])
+    return action
+
+def go_above_reorient(env, obj_number, offset = np.zeros(3)):
+    desired_position = env.panda.calc_environment_state()[obj_number]['pos'] + np.array([0, 0.00, 0.1])
+    action = np.concatenate([desired_position , env.panda.default_arm_orn, open_gripper])
+    return action
 
 
 def pick_to(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
     global which_object
-    times = np.array([0.7, 1.2, 1.4, 1.6, 2.0, 2.2]) + t
+    times = np.array([0.7, 1.2, 1.4, 1.6, 2.5, 2.9]) + t
     #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
     states = [go_above, descend, close, lift, take_to, go_above]
 
@@ -95,14 +101,114 @@ def pick_to(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
     which_object = not which_object # flip which object we are playing with
     return data
 
+def pick_reorient(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
+    global which_object
+    times = np.array([0.7, 1.2, 1.4, 1.6, 2.5, 2.9]) + t
+    #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
+    states = [go_above, descend, close, lift, reorient_obj, go_above_reorient]
+
+
+    take_to_pos = env.panda.calc_environment_state()[which_object]['pos'] + np.array([0,0,0.05])
+    goal = env.panda.goal
+    goal[which_object*3:(which_object+1)*3] = take_to_pos
+    env.panda.reset_goal_pos(goal)
+    data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=take_to_pos, obj_number=which_object)
+    which_object = not which_object # flip which object we are playing with
+    return data
+#################################################### Door script ####################################
+
+door_z = 0.12
+
+def go_up(env, goal):
+    desired_position = [0,0,0]
+    desired_position[2] = 0.3
+    action = np.concatenate([np.array(desired_position), top_down_grip_ori, open_gripper])
+    return action
+
+def go_in_front(env, goal):
+    door_x =  env.panda.calc_environment_state()[2]['pos'][0]
+    desired_position = np.array([door_x, 0.30, door_z])
+    action = np.concatenate([desired_position, env.panda.default_arm_orn, open_gripper])
+    return action
+
+def close_on_door(env, goal):
+    door_x = env.panda.calc_environment_state()[2]['pos'][0]
+    desired_position = np.array([door_x, 0.4, door_z])
+    action = np.concatenate([desired_position, env.panda.default_arm_orn, closed_gripper])
+    return action
+
+def pull_door(env, goal):
+
+    action = np.concatenate([goal, env.panda.default_arm_orn, closed_gripper])
+    return action
+
+
+def toggle_door(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
+    #times = np.array([0.4, 1.0, 1.4, 1.9, 2.0]) + t
+    times = np.array([0.7, 1.0, 1.5, 1.6,2.0]) + t
+    #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
+    states = [go_in_front, close_on_door, pull_door, go_in_front, go_up] # go up is optional
+
+    door_x = env.panda.calc_environment_state()[2]['pos'][0]
+    if door_x < 0:
+        des_x = 0.15
+    else:
+        des_x = -0.15
+    desired_position = np.array([des_x, 0.4, door_z])
+
+    data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=desired_position,  obj_number=None)
+    return data
+
+################################################### Toggle Drawer #############################################################
+
+drawer_x = -0.15
+drawer_handle = 0.25
+def go_above_drawer(env, goal):
+    drawer_y = -env.panda.calc_environment_state()[3]['pos'][0] -drawer_handle
+    desired_position = [drawer_x, drawer_y, -0.00]
+    action = np.concatenate([np.array(desired_position), top_down_grip_ori, open_gripper])
+    return action
+
+def close_on_drawer(env, goal):
+    drawer_y = -env.panda.calc_environment_state()[3]['pos'][0] - drawer_handle
+    desired_position = [drawer_x, drawer_y, -0.1]
+    action = np.concatenate([np.array(desired_position), top_down_grip_ori, open_gripper])
+    return action
+
+def pull_drawer(env, goal):
+    desired_position = goal
+    action = np.concatenate([np.array(desired_position), top_down_grip_ori, closed_gripper])
+    return action
+
+def toggle_drawer(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
+    #times = np.array([0.4, 1.0, 1.4, 1.9, 2.0]) + t
+    times = np.array([0.7, 1.0, 1.5, 1.6]) + t
+    #times = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) + t
+    states = [go_above_drawer, close_on_drawer, pull_drawer, go_up] # go up is optional
+
+    drawer_y = -env.panda.calc_environment_state()[3]['pos'][0]
+    if drawer_y < 0:
+        des_y = 0.15
+    else:
+        des_y = -0.15
+    desired_position = np.array([drawer_x, -0.2+des_y, -0.1])
+
+    data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=desired_position,  obj_number=None)
+    return data
+
+
 
 def peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=None, offset=np.zeros(3), obj_number=0):
     state_pointer = 0
     while (t < times[state_pointer]):
-        if state_pointer == 4:
-            action = states[state_pointer](env, goal, offset = np.zeros(3))
+        if obj_number is not None:
+            if state_pointer == 4:
+                action = states[state_pointer](env, goal, offset = np.zeros(3))
+            else:
+                action = states[state_pointer](env, obj_number=obj_number, offset=offset)
         else:
-            action = states[state_pointer](env, obj_number=obj_number, offset=offset)
+            action = states[state_pointer](env, goal)
+
         if not debugging:
             p.saveBullet(example_path + '/env_states/' + str(counter) + ".bullet")
         counter += 1  # little counter for saving the bullet states
@@ -132,40 +238,45 @@ def peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses
 
 
 
-debugging = True
+debugging = False
 
 dt = 0.04
 
-action_buff = []
-observation_buff = []
-desired_currentPoses_buff = []
-achieved_currentPoses_buff = []
-controllable_achieved_goal_buff = []
-full_positional_state_buff = []
+base_path = 'collected_data/scripted_play_demos/'
+obs_act_path = base_path + 'obs_act_etc/'
+env_state_path = base_path + 'states_and_ims/'
 
 
-base_path = 'collected_data/play_demos/'
 try:
-    os.makedirs(base_path)
+    os.makedirs(obs_act_path)
 except:
-    print('Folder already exists')
+    pass
 
-demo_count = len(list(os.listdir(base_path)))
+try:
+    os.makedirs(env_state_path)
+except:
+    pass
 
-activities = [pick_to]#, push_directionally]
+
+
+activities = [toggle_drawer, toggle_door, pick_reorient, pick_to] #[pick_to]#, push_directionally]
 #activities = [push_directionally]
 
-play_len = 120
+play_len = 8
 
-for i in tqdm(range(0, 60)):
+for i in tqdm(range(0, 500)): # 60
     o = env.reset()
     t = 0
 
     acts, obs, currentPoses, ags, cagb, targetPoses = [], [], [], [], [], []
-    example_path = base_path + str(demo_count)
+
+    demo_count = len(list(os.listdir(obs_act_path)))
+    example_path = env_state_path + str(demo_count)
+    npz_path = obs_act_path + str(demo_count)
     if not debugging:
-        os.makedirs(example_path)
         os.makedirs(example_path + '/env_states')
+        os.makedirs(example_path + '/env_images')
+        os.makedirs(npz_path)
     counter = 0
 
     #pbar = tqdm(total=play_len)
@@ -180,22 +291,18 @@ for i in tqdm(range(0, 60)):
         o = result['last_obs']
 
 
-    if t>(play_len/2): #reasonable length with some play interaction
+    if t>6: #reasonable length with some play interaction
         if not debugging:
-
-            action_buff.append(acts), observation_buff.append(obs), desired_currentPoses_buff.append(
-                currentPoses), achieved_currentPoses_buff.append(ags), \
-            controllable_achieved_goal_buff.append(cagb), full_positional_state_buff.append(targetPoses)
-
-            np.savez(base_path + str(demo_count) + '/data', acts=acts, obs=obs,
-                     achieved_currentPoses=ags,
-                     controllable_achieved_currentPoses=cagb, joint_poses=currentPoses, target_poses=targetPoses)
+            np.savez(npz_path+ '/data', acts=acts, obs=obs,
+                     achieved_goals =ags,
+                     controllable_achieved_goals =cagb, joint_poses=currentPoses, target_poses=targetPoses)
             demo_count += 1
     else:
         print('Demo failed')
         # delete the folder with all the saved states within it
         if not debugging:
-            shutil.rmtree(base_path + str(demo_count))
+            shutil.rmtree(obs_act_path  + str(demo_count))
+            shutil.rmtree(env_state_path + str(demo_count))
 
 
 
