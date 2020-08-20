@@ -13,10 +13,11 @@ import math
 import pandaRL
 import gym
 import os
+import shutil
 # p.connect(p.UDP,"192.168.86.100")
 import matplotlib.pyplot as plt
 
-env= gym.make('pandaPlay-v0')
+env= gym.make('pandaPlayJoints1Obj-v0')
 env.vr_activation()
 env.reset()
 p=env.p
@@ -65,7 +66,7 @@ ORIENTATION = 2
 ANALOG = 3
 BUTTONS = 6
 
-base_path = 'collected_data/play_demos/'
+base_path = 'collected_data/play_one_obj_demos/'
 obs_act_path = base_path + 'obs_act_etc/'
 env_state_path = base_path + 'states_and_ims/'
 
@@ -119,6 +120,7 @@ while(1):
     demo_count = len(list(os.listdir(obs_act_path)))
     example_path = env_state_path + str(demo_count)
     npz_path = obs_act_path+str(demo_count)
+
     if not debugging:
         os.makedirs(example_path + '/env_states')
         os.makedirs(example_path + '/env_images')
@@ -131,21 +133,30 @@ while(1):
     env.p.restoreState(fileName = os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet')
     
     acts, obs, ags, cagb, joints, targetJoints = [], [], [], [], [], []
-    while(1):
-        get_new_command()
-        t = time.time()
-        if t >= next_time:
-            if not debugging:
-                env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
-            save_stuff(env)
-            target = do_command(t,t0)
-            targetJoints.append(target)
-            next_time = next_time + 1/control_frequency
-            counter += 1
+    try:
 
-        if BUTTON == 1:
-            save(npz_path)
-            break
+        while(1):
+            get_new_command()
+            t = time.time()
+            if t >= next_time:
+                if not debugging:
+                    env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
+                save_stuff(env)
+                target = do_command(t,t0)
+                targetJoints.append(target)
+                next_time = next_time + 1/control_frequency
+                counter += 1
+
+            if BUTTON == 1:
+                save(npz_path)
+                break
 
     
+    except:
+        
+        shutil.rmtree(example_path)
+        shutil.rmtree(npz_path)
+        print('Ending Data Collection')
+        break
+        
     
