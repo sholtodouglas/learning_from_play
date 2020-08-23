@@ -6,7 +6,7 @@ import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
 import tensorflow as tf
-from tensorflow.data.experimental import AUTOTUNE
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 import os
 import numpy as np
 
