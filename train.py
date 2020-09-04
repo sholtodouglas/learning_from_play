@@ -9,7 +9,7 @@ class BetaScheduler():
         self.max_steps = max_steps
 
         if schedule=='constant':
-            self.scheduler = lambda s: beta
+            self.scheduler = lambda s: tf.ones_like(s)*beta
         elif schedule=='linear':
             self.scheduler = self.linear_schedule
         elif schedule=='quadratic':
@@ -19,12 +19,12 @@ class BetaScheduler():
         if plot: self._plot_schedule()
     
     def linear_schedule(self, step):
-        beta = self.beta_min + step * (self.beta_max-self.beta_min)/self.max_steps
+        beta = self.beta_min + (step) * (self.beta_max-self.beta_min)/self.max_steps
         return tf.clip_by_value(beta, self.beta_min, self.beta_max, name='beta_linear')
 
     def quadratic_schedule(self, step):
         ''' y = (b1-b0)/n^2 * x^2 + b0 '''
-        beta = self.beta_min + step**2 * (self.beta_max-self.beta_min)/self.max_steps**2
+        beta = self.beta_min + (step)**2 * (self.beta_max-self.beta_min)/self.max_steps**2
         return tf.clip_by_value(beta, self.beta_min, self.beta_max, name='beta_quadratic')
 
     def cyclic_schedule(self, step):
