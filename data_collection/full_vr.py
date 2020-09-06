@@ -82,7 +82,14 @@ except:
     pass
 
 
-
+def quat_sign_flip(a, idxs):
+    for pair in idxs:
+        for i in range(1, len(a)):
+            quat = a[i, pair[0]:pair[1]]
+            last_quat = a[i - 1, pair[0]:pair[1]]
+            if (np.sign(quat) == -np.sign(last_quat)).all():  # i.e, it is an equivalent quaternion
+                a[i, pair[0]:pair[1]] = - a[i, pair[0]:pair[1]]
+    return a
 
 
 
@@ -110,6 +117,9 @@ while not get_new_command():
 def save(npz_path):
     print(npz_path)
     if not debugging:
+        acts = quat_sign_flip(acts, [(3, 7)])
+        obs = quat_sign_flip(obs, [(3, 7), (10, 14)])
+        ags = quat_sign_flip(ags, [(3, 7)])
         np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
     print('Finito')
 
