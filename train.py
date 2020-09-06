@@ -5,6 +5,7 @@ import tensorflow as tf
 class BetaScheduler():
     def __init__(self, schedule='constant', beta=0.0, beta_max=1.0, max_steps=1e4,
                     cycles=10, duty_cycle=0.5, plot=True):
+        self.schedule = schedule
         self.beta_min = beta
         self.beta_max = beta_max
         self.max_steps = max_steps
