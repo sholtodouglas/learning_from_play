@@ -18,15 +18,17 @@ class LearnedInitLSTM(LSTM):
         super(LearnedInitLSTM, self).build(input_shape)
         # Add learnable weights for each state
         self.w, self.b = [], []
-        for _ in self.cell.state_size:
+        for s_i,_ in enumerate(self.cell.state_size):
             w = self.add_weight(shape=(input_shape[-1], self.units),
                                     initializer='zeros',
                                     trainable=True,
-                                    dtype=tf.float32)
+                                    dtype=tf.float32,
+                                    name=f'learned_init_w{s_i}')
             b = self.add_weight(shape=(self.units,),
                                     initializer='zeros',
                                     trainable=True,
-                                    dtype=tf.float32)
+                                    dtype=tf.float32,
+                                    name=f'learned_init_b{s_i}')
             self.w.append(w)
             self.b.append(b)
 
@@ -83,11 +85,13 @@ class LearnedInitGRU(GRU):
         self.w = self.add_weight(shape=(input_shape[-1], self.units),
                                 initializer='zeros',
                                 trainable=True,
-                                dtype=tf.float32)
+                                dtype=tf.float32,
+                                 name=f'learned_init_w')
         self.b = self.add_weight(shape=(self.units,),
                                 initializer='zeros',
                                 trainable=True,
-                                dtype=tf.float32)
+                                dtype=tf.float32,
+                                 name=f'learned_init_b')
 
     def get_initial_state(self, inputs):
 
