@@ -7,7 +7,7 @@ import os
 import shutil
 from tqdm import tqdm
 
-env = gym.make('pandaPlay-v0')
+env = gym.make('pandaPlay1Obj-v0')
 env.render(mode='human')
 env.reset()
 
@@ -98,7 +98,7 @@ def pick_to(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
     goal[which_object*3:(which_object+1)*3] = take_to_pos
     env.panda.reset_goal_pos(goal)
     data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=take_to_pos, obj_number=which_object)
-    which_object = not which_object # flip which object we are playing with
+    min(env.num_objects-1, not which_object) # flip which object we are playing with
     return data
 
 def pick_reorient(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses):
@@ -113,7 +113,7 @@ def pick_reorient(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses
     goal[which_object*3:(which_object+1)*3] = take_to_pos
     env.panda.reset_goal_pos(goal)
     data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=take_to_pos, obj_number=which_object)
-    which_object = not which_object # flip which object we are playing with
+    which_object = min(env.num_objects-1, not which_object) # flip which object we are playing with
     return data
 #################################################### Door script ####################################
 
@@ -196,7 +196,14 @@ def toggle_drawer(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses
     data = peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=desired_position,  obj_number=None)
     return data
 
-
+def quat_sign_flip(a, idxs):
+    for pair in idxs:
+        for i in range(1, len(a)):
+            quat = a[i, pair[0]:pair[1]]
+            last_quat = a[i - 1, pair[0]:pair[1]]
+            if (np.sign(quat) == -np.sign(last_quat)).all():  # i.e, it is an equivalent quaternion
+                a[i, pair[0]:pair[1]] = - a[i, pair[0]:pair[1]]
+    return a
 
 def peform_action(env, t, o, counter, acts,obs,currentPoses,ags,cagb,targetPoses, times, states, goal=None, offset=np.zeros(3), obj_number=0):
     state_pointer = 0
@@ -293,6 +300,9 @@ for i in tqdm(range(0, 500)): # 60
 
     if t>6: #reasonable length with some play interaction
         if not debugging:
+            acts = quat_sign_flip(np.array(acts), [(3, 7)])
+            obs = quat_sign_flip(np.array(obs), [(3, 7), (10, 14)])
+            ags = quat_sign_flip(np.array(ags), [(3, 7)])
             np.savez(npz_path+ '/data', acts=acts, obs=obs,
                      achieved_goals =ags,
                      controllable_achieved_goals =cagb, joint_poses=currentPoses, target_poses=targetPoses)
