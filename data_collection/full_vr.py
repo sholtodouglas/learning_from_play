@@ -17,7 +17,7 @@ import shutil
 # p.connect(p.UDP,"192.168.86.100")
 import matplotlib.pyplot as plt
 
-env= gym.make('pandaPlayJoints1Obj-v0')
+env= gym.make('pandaPlayAbsRPY1Obj-v0')
 env.vr_activation()
 env.reset()
 p=env.p
@@ -30,7 +30,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -0.5], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.2], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -51,7 +51,7 @@ def get_new_command():
         e = events[0]
         POS = list(e[POSITION])
         ORI = list(e[ORIENTATION])
-        GRIPPER = abs(1 - e[ANALOG]) / 25
+        GRIPPER =  e[ANALOG]
         BUTTON = e[BUTTONS][2]
         return 1
         #print(p.getEulerFromQuaternion(ORI))
@@ -66,7 +66,7 @@ ORIENTATION = 2
 ANALOG = 3
 BUTTONS = 6
 
-base_path = 'collected_data/play_one_obj_demos/'
+base_path = 'collected_data/new_ori_one_obj/'
 obs_act_path = base_path + 'obs_act_etc/'
 env_state_path = base_path + 'states_and_ims/'
 
@@ -82,14 +82,7 @@ except:
     pass
 
 
-def quat_sign_flip(a, idxs):
-    for pair in idxs:
-        for i in range(1, len(a)):
-            quat = a[i, pair[0]:pair[1]]
-            last_quat = a[i - 1, pair[0]:pair[1]]
-            if (np.sign(quat) == -np.sign(last_quat)).all():  # i.e, it is an equivalent quaternion
-                a[i, pair[0]:pair[1]] = - a[i, pair[0]:pair[1]]
-    return a
+
 
 
 
@@ -101,26 +94,35 @@ def do_command(t,t0):
 
 
 
-def save_stuff(env):
+def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities):
     # what do we care about, POS, ORI and GRIPPER?
     state = env.panda.calc_state()
+    #print(p.getEulerFromQuaternion(state['observation'][3:7]))
+    
     #pos_to_save = list(np.array(POS) - state['observation'][0:3]) # actually, keep it absolute
     action = np.array(POS+ORI+[GRIPPER])
+    ori_rpy = p.getEulerFromQuaternion(ORI)
+    rel_xyz = np.array(POS)-np.array(state['observation'][0:3])
+    rel_rpy = np.array(ori_rpy) - np.array(p.getEulerFromQuaternion(state['observation'][3:7]))
+    action_rpy =  np.array(POS+list(ori_rpy)+[GRIPPER])
+    action_rpy_rel = np.array(list(rel_xyz)+list(rel_rpy)+[GRIPPER])
+
+
     acts.append(action), obs.append(state['observation']), ags.append(
         state['achieved_goal']), \
-    cagb.append(state['controllable_achieved_goal']), joints.append(state['joints'])
+    cagb.append(state['controllable_achieved_goal']), joints.append(state['joints']), acts_rpy.append(action_rpy),
+    acts_rpy_rel.append(action_rpy_rel), velocities.append(state['velocity'])
+
     # Saving images to expensive here, regen state! and saveimages there
 while not get_new_command():
     pass
 
 
-def save(npz_path):
+def save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities):
     print(npz_path)
     if not debugging:
-        acts = quat_sign_flip(acts, [(3, 7)])
-        obs = quat_sign_flip(obs, [(3, 7), (10, 14)])
-        ags = quat_sign_flip(ags, [(3, 7)])
-        np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints)
+        np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, 
+        controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints, acts_rpy=acts_rpy, acts_rpy_rel=acts_rpy_rel, velocities=velocities)
     print('Finito')
 
 env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet') 
@@ -142,7 +144,7 @@ while(1):
     # reset from init
     env.p.restoreState(fileName = os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet')
     
-    acts, obs, ags, cagb, joints, targetJoints = [], [], [], [], [], []
+    acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities = [], [], [], [], [], [], [], [],[]
     try:
 
         while(1):
@@ -151,22 +153,23 @@ while(1):
             if t >= next_time:
                 if not debugging:
                     env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
-                save_stuff(env)
+                save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities)
                 target = do_command(t,t0)
                 targetJoints.append(target)
                 next_time = next_time + 1/control_frequency
                 counter += 1
 
             if BUTTON == 1:
-                save(npz_path)
+                save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities)
                 break
 
     
     except:
         
-        shutil.rmtree(example_path)
-        shutil.rmtree(npz_path)
-        print('Ending Data Collection')
-        break
+        if not debugging:
+            shutil.rmtree(example_path)
+            shutil.rmtree(npz_path)
+            print('Ending Data Collection')
+            break
         
     
