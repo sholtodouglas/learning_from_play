@@ -10,7 +10,11 @@ class LearnedInitLSTM(LSTM):
     state and h is the carry state.
     This aims to overcome the poor performance of RNNs within the first few timesteps due to naive zero init.
     """
-    def __init__(self, units, learned_init=True, **kwargs):
+    def __init__(self, units, learned_init='static', **kwargs):
+        """
+        :param units: number of LSTM units (as per usual)
+        :param learned_init: 'static' (learned init vector), 'dynamic' (learned init mapping) or None
+        """
         super(LearnedInitLSTM, self).__init__(units, **kwargs)
         self.learned_init = learned_init
 
@@ -19,17 +23,19 @@ class LearnedInitLSTM(LSTM):
         # Add learnable weights for each state
         self.w, self.b = [], []
         for s_i,_ in enumerate(self.cell.state_size):
-            w = self.add_weight(shape=(input_shape[-1], self.units),
-                                    initializer='zeros',
-                                    trainable=True,
-                                    dtype=tf.float32,
-                                    name=f'learned_init_w{s_i}')
+            # If dynamic we need w,b mapping, else for static just use b as init vector
+            if self.learned_init == 'dynamic':
+                w = self.add_weight(shape=(input_shape[-1], self.units),
+                                        initializer='zeros',
+                                        trainable=True,
+                                        dtype=tf.float32,
+                                        name=f'learned_init_w{s_i}')
+                self.w.append(w)
             b = self.add_weight(shape=(self.units,),
                                     initializer='zeros',
                                     trainable=True,
                                     dtype=tf.float32,
                                     name=f'learned_init_b{s_i}')
-            self.w.append(w)
             self.b.append(b)
 
     def get_initial_state(self, inputs):
@@ -60,8 +66,10 @@ class LearnedInitLSTM(LSTM):
         def create_init_values(unnested_state_size, s_i=0):
             flat_dims = tensor_shape.TensorShape(unnested_state_size).as_list()
             init_state_size = [batch_size_tensor] + flat_dims
-            if self.learned_init:
+            if self.learned_init == 'dynamic':
                 return inputs[:,0,:] @ self.w[s_i] + self.b[s_i]
+            elif self.learned_init == 'static':
+                return self.b[s_i]
             else:
                 return array_ops.zeros(init_state_size, dtype=dtype)
 
