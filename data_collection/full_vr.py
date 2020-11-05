@@ -18,7 +18,13 @@ import threading
 # p.connect(p.UDP,"192.168.86.100")
 import matplotlib.pyplot as plt
 
-env= gym.make('pandaPlayAbsRPY1Obj-v0')
+arm = 'UR5'
+if arm == 'UR5':
+    print('UR5!')
+    env= gym.make('UR5PlayAbsRPY1Obj-v0')
+else:
+    env= gym.make('PandaPlayAbsRPY1Obj-v0')
+
 env.vr_activation()
 env.reset()
 p=env.p
@@ -31,7 +37,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.0], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.5], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -67,7 +73,10 @@ ORIENTATION = 2
 ANALOG = 3
 BUTTONS = 6
 
-base_path = 'collected_data/30Hz_one_obj/'
+if arm == 'UR5':
+    base_path = 'collected_data/UR5_30Hz_one_obj/'
+else:
+    base_path = 'collected_data/30Hz_one_obj/'
 obs_act_path = base_path + 'obs_act_etc/'
 env_state_path = base_path + 'states_and_ims/'
 
