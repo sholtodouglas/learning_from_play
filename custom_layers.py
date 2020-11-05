@@ -69,7 +69,8 @@ class LearnedInitLSTM(LSTM):
             if self.learned_init == 'dynamic':
                 return inputs[:,0,:] @ self.w[s_i] + self.b[s_i]
             elif self.learned_init == 'static':
-                return self.b[s_i]
+                # Broadcast learned init vector to batch size
+                return tf.broadcast_to(self.b[s_i], init_state_size)
             else:
                 return array_ops.zeros(init_state_size, dtype=dtype)
 
