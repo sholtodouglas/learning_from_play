@@ -14,6 +14,7 @@ import pandaRL
 import gym
 import os
 import shutil
+import threading
 # p.connect(p.UDP,"192.168.86.100")
 import matplotlib.pyplot as plt
 
@@ -30,7 +31,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.2], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.0], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -66,7 +67,7 @@ ORIENTATION = 2
 ANALOG = 3
 BUTTONS = 6
 
-base_path = 'collected_data/new_ori_one_obj/'
+base_path = 'collected_data/30Hz_one_obj/'
 obs_act_path = base_path + 'obs_act_etc/'
 env_state_path = base_path + 'states_and_ims/'
 
@@ -87,42 +88,47 @@ except:
 
 
 def do_command(t,t0):
-    print(t-t0)
+    #print(t-t0)
     #print(GRIPPER)
     targetPoses = env.panda.goto(POS, ORI, GRIPPER)
     return targetPoses
 
 
 
-def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities):
+def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy):
     # what do we care about, POS, ORI and GRIPPER?
-    state = env.panda.calc_state()
+    state = env.panda.calc_state() 
     #print(p.getEulerFromQuaternion(state['observation'][3:7]))
     
     #pos_to_save = list(np.array(POS) - state['observation'][0:3]) # actually, keep it absolute
-    action = np.array(POS+ORI+[GRIPPER])
+    action = np.array(POS+ORI+[GRIPPER]) 
     ori_rpy = p.getEulerFromQuaternion(ORI)
     rel_xyz = np.array(POS)-np.array(state['observation'][0:3])
     rel_rpy = np.array(ori_rpy) - np.array(p.getEulerFromQuaternion(state['observation'][3:7]))
     action_rpy =  np.array(POS+list(ori_rpy)+[GRIPPER])
     action_rpy_rel = np.array(list(rel_xyz)+list(rel_rpy)+[GRIPPER])
 
-
+    
     acts.append(action), obs.append(state['observation']), ags.append(
         state['achieved_goal']), \
     cagb.append(state['controllable_achieved_goal']), joints.append(state['joints']), acts_rpy.append(action_rpy),
-    acts_rpy_rel.append(action_rpy_rel), velocities.append(state['velocity'])
+    acts_rpy_rel.append(action_rpy_rel), velocities.append(state['velocity']), obs_rpy.append(state['obs_rpy'])
 
     # Saving images to expensive here, regen state! and saveimages there
 while not get_new_command():
     pass
 
+def save_state(env, example_path, counter):
+    #env, example_path, counter = args
+    env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
 
-def save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities):
+
+def save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy):
     print(npz_path)
     if not debugging:
+        
         np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, 
-        controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints, acts_rpy=acts_rpy, acts_rpy_rel=acts_rpy_rel, velocities=velocities)
+        controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints, acts_rpy=acts_rpy, acts_rpy_rel=acts_rpy_rel, velocities=velocities, obs_rpy=obs_rpy)
     print('Finito')
 
 env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet') 
@@ -138,34 +144,40 @@ while(1):
         os.makedirs(example_path + '/env_images')
         os.makedirs(npz_path)
     counter = 0
-    control_frequency = 20 # Hz
+    control_frequency = 30 # Hz
     t0 = time.time()
     next_time = t0 + 1/control_frequency
-    # reset from init
+    # reset from init which we created (allows you to press a button on the controller and reset the env)
     env.p.restoreState(fileName = os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet')
     
-    acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities = [], [], [], [], [], [], [], [],[]
+    acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy = [], [], [], [], [], [], [], [],[], []
     try:
-
+        
         while(1):
             get_new_command()
             t = time.time()
             if t >= next_time:
+                #print(t - next_time, 1/control_frequency)
+                print(1/((1/control_frequency) + (t - next_time)))
                 if not debugging:
-                    env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
-                save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities)
+                    if counter % 30 == 0:
+                        thread = threading.Thread(target = save_state, name = str(counter), args = (env, example_path, counter))
+                        thread.start()
+                    
+                save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy)
                 target = do_command(t,t0)
                 targetJoints.append(target)
+                
                 next_time = next_time + 1/control_frequency
                 counter += 1
 
             if BUTTON == 1:
-                save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities)
+                save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy)
                 break
 
     
-    except:
-        
+    except Exception as e:
+        print(e)
         if not debugging:
             shutil.rmtree(example_path)
             shutil.rmtree(npz_path)
