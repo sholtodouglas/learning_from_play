@@ -84,34 +84,24 @@ class LearnedInitGRU(GRU):
     Same as LSTM - only key difference is GRU only has one state to keep track of
     Todo: See if we can combine both implementations into one general RNN learned init wrapper class
     """
-
     def __init__(self, units, learned_init='static', **kwargs):
-        """
-        :param units: number of LSTM units (as per usual)
-        :param learned_init: 'static' (learned init vector), 'dynamic' (learned init mapping) or None
-        """
         super(LearnedInitGRU, self).__init__(units, **kwargs)
         self.learned_init = learned_init
 
     def build(self, input_shape):
         super(LearnedInitGRU, self).build(input_shape)
         # Add learnable weights for each state
-        self.w, self.b = [], []
-        for s_i, _ in enumerate(self.cell.state_size):
-            # If dynamic we need w,b mapping, else for static just use b as init vector
-            if self.learned_init == 'dynamic':
-                w = self.add_weight(shape=(input_shape[-1], self.units),
+        if self.learned_init == 'dynamic':
+            self.w = self.add_weight(shape=(input_shape[-1], self.units),
                                     initializer='zeros',
                                     trainable=True,
                                     dtype=tf.float32,
-                                    name=f'learned_init_w{s_i}')
-                self.w.append(w)
-            b = self.add_weight(shape=(self.units,),
+                                     name=f'learned_init_w')
+        self.b = self.add_weight(shape=(self.units,),
                                 initializer='zeros',
                                 trainable=True,
                                 dtype=tf.float32,
-                                name=f'learned_init_b{s_i}')
-            self.b.append(b)
+                                 name=f'learned_init_b')
 
     def get_initial_state(self, inputs):
 
@@ -138,18 +128,18 @@ class LearnedInitGRU(GRU):
                 'batch_size and dtype cannot be None while constructing initial state: '
                 'batch_size={}, dtype={}'.format(batch_size_tensor, dtype))
 
-        def create_init_values(unnested_state_size, s_i=0):
+        def create_init_values(unnested_state_size):
             flat_dims = tensor_shape.TensorShape(unnested_state_size).as_list()
             init_state_size = [batch_size_tensor] + flat_dims
             if self.learned_init == 'dynamic':
-                return inputs[:, 0, :] @ self.w[s_i] + self.b[s_i]
+                return inputs[:,0,:] @ self.w + self.b
             elif self.learned_init == 'static':
                 # Broadcast learned init vector to batch size
-                return tf.broadcast_to(self.b[s_i], init_state_size)
+                return tf.broadcast_to(self.b, init_state_size)
             else:
                 return array_ops.zeros(init_state_size, dtype=dtype)
 
         if nest.is_nested(state_size):
-            return nest.map_structure(create_init_values, state_size, list(range(len(state_size))))
+            return nest.map_structure(create_init_values, state_size)
         else:
             return create_init_values(state_size)
