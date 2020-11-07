@@ -37,7 +37,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.5], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.1], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -58,6 +58,7 @@ def get_new_command():
         e = events[0]
         POS = list(e[POSITION])
         ORI = list(e[ORIENTATION])
+        
         GRIPPER =  e[ANALOG]
         BUTTON = e[BUTTONS][2]
         return 1
@@ -99,6 +100,7 @@ except:
 def do_command(t,t0):
     #print(t-t0)
     #print(GRIPPER)
+    #print(p.getEulerFromQuaternion(ORI))
     targetPoses = env.panda.goto(POS, ORI, GRIPPER)
     return targetPoses
 
@@ -166,8 +168,8 @@ while(1):
             get_new_command()
             t = time.time()
             if t >= next_time:
-                #print(t - next_time, 1/control_frequency)
-                print(1/((1/control_frequency) + (t - next_time)))
+                
+                print(1/((1/control_frequency) + (t - next_time))) # prints the current fps
                 if not debugging:
                     if counter % 30 == 0:
                         thread = threading.Thread(target = save_state, name = str(counter), args = (env, example_path, counter))
