@@ -84,18 +84,19 @@ class LearnedInitGRU(GRU):
     Same as LSTM - only key difference is GRU only has one state to keep track of
     Todo: See if we can combine both implementations into one general RNN learned init wrapper class
     """
-    def __init__(self, units, learned_init=True, **kwargs):
+    def __init__(self, units, learned_init='static', **kwargs):
         super(LearnedInitGRU, self).__init__(units, **kwargs)
         self.learned_init = learned_init
 
     def build(self, input_shape):
         super(LearnedInitGRU, self).build(input_shape)
         # Add learnable weights for each state
-        self.w = self.add_weight(shape=(input_shape[-1], self.units),
-                                initializer='zeros',
-                                trainable=True,
-                                dtype=tf.float32,
-                                 name=f'learned_init_w')
+        if self.learned_init == 'dynamic':
+            self.w = self.add_weight(shape=(input_shape[-1], self.units),
+                                    initializer='zeros',
+                                    trainable=True,
+                                    dtype=tf.float32,
+                                     name=f'learned_init_w')
         self.b = self.add_weight(shape=(self.units,),
                                 initializer='zeros',
                                 trainable=True,
@@ -130,8 +131,11 @@ class LearnedInitGRU(GRU):
         def create_init_values(unnested_state_size):
             flat_dims = tensor_shape.TensorShape(unnested_state_size).as_list()
             init_state_size = [batch_size_tensor] + flat_dims
-            if self.learned_init:
+            if self.learned_init == 'dynamic':
                 return inputs[:,0,:] @ self.w + self.b
+            elif self.learned_init == 'static':
+                # Broadcast learned init vector to batch size
+                return tf.broadcast_to(self.b, init_state_size)
             else:
                 return array_ops.zeros(init_state_size, dtype=dtype)
 
