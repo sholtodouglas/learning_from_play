@@ -8,7 +8,7 @@ import pybullet as p
 import time
 import pybullet_data
 import numpy as np
-from pickle import dumps
+from pickle import dumps 
 import math
 import pandaRL
 import gym
@@ -37,7 +37,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.4], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.8], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
@@ -75,7 +75,7 @@ ANALOG = 3
 BUTTONS = 6
 
 if arm == 'UR5':
-    base_path = 'collected_data/UR5_30Hz_one_obj/'
+    base_path = 'collected_data/UR5_25Hz_one_obj/'
 else:
     base_path = 'collected_data/30Hz_one_obj/'
 obs_act_path = base_path + 'obs_act_etc/'
@@ -155,7 +155,7 @@ while(1):
         os.makedirs(example_path + '/env_images')
         os.makedirs(npz_path)
     counter = 0
-    control_frequency = 30 # Hz
+    control_frequency = 25 # Hz
     t0 = time.time()
     next_time = t0 + 1/control_frequency
     # reset from init which we created (allows you to press a button on the controller and reset the env)
@@ -165,7 +165,9 @@ while(1):
     try:
         
         while(1):
+            
             get_new_command()
+            
             t = time.time()
             if t >= next_time:
                 
