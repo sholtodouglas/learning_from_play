@@ -39,7 +39,7 @@ print(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 # p.configureDebugVisualizer(p.COV_ENABLE_Y_AXIS_UP , 1)
-p.setVRCameraState([0.0, -0.3, -1.5], p.getQuaternionFromEuler([0, 0, 0]))
+p.setVRCameraState([0.0, -0.3, -1.1], p.getQuaternionFromEuler([0, 0, 0]))
 
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 p.setRealTimeSimulation(1)
