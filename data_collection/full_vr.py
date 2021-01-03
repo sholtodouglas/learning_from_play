@@ -75,7 +75,7 @@ ANALOG = 3
 BUTTONS = 6
 
 if arm == 'UR5':
-    base_path = 'collected_data/UR5_25Hz_one_obj/'
+    base_path = 'collected_data/UR5_25Hz_test_suite/'
 else:
     base_path = 'collected_data/30Hz_one_obj/'
 obs_act_path = base_path + 'obs_act_etc/'
