@@ -178,15 +178,15 @@ Project Link: [https://github.com/sholtodouglas/learning_from_play](https://gith
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/sholtodouglas/repo.svg?style=for-the-badge
-[contributors-url]: https://github.com/sholtodouglas/repo/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/sholtodouglas/repo.svg?style=for-the-badge
-[forks-url]: https://github.com/sholtodouglas/repo/network/members
-[stars-shield]: https://img.shields.io/github/stars/sholtodouglas/repo.svg?style=for-the-badge
-[stars-url]: https://github.com/sholtodouglas/repo/stargazers
-[issues-shield]: https://img.shields.io/github/issues/sholtodouglas/repo.svg?style=for-the-badge
-[issues-url]: https://github.com/sholtodouglas/repo/issues
-[license-shield]: https://img.shields.io/github/license/sholtodouglas/repo.svg?style=for-the-badge
-[license-url]: https://github.com/sholtodouglas/repo/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/sholtodouglas/learning_from_play.svg?style=for-the-badge
+[contributors-url]: https://github.com/sholtodouglas/learning_from_play/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/sholtodouglas/learning_from_play.svg?style=for-the-badge
+[forks-url]: https://github.com/sholtodouglas/learning_from_play/network/members
+[stars-shield]: https://img.shields.io/github/stars/sholtodouglas/learning_from_play.svg?style=for-the-badge
+[stars-url]: https://github.com/sholtodouglas/learning_from_play/stargazers
+[issues-shield]: https://img.shields.io/github/issues/sholtodouglas/learning_from_play.svg?style=for-the-badge
+[issues-url]: https://github.com/sholtodouglas/learning_from_play/issues
+[license-shield]: https://img.shields.io/github/license/sholtodouglas/learning_from_play.svg?style=for-the-badge
+[license-url]: https://github.com/sholtodouglas/learning_from_play/blob/master/LICENSE
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/sholtodouglas
