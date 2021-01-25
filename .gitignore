@@ -1,6 +1,7 @@
 
 .ipynb_checkpoints
 .idea
+.vscode
 scatter.mp4
 /kitchen_demos_multitask/*
 __pycache__
@@ -10,3 +11,4 @@ config.py
 /saved_models/*
 /.idea/*
 /__pycache__/*
+lfp_venv
