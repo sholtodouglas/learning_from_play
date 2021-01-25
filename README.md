@@ -89,7 +89,7 @@
 <!-- ![Demo](media/demo.png) -->
 <p align="center">
 	<a href="https://github.com/sholtodouglas/learning_from_play/media/demo.png">
-		<img src="media/demo.png" width="300" height="300">
+		<img src="media/demo.png" width="400" height="400">
 	</a>
 </p>
 
