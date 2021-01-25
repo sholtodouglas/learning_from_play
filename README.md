@@ -34,7 +34,7 @@
 <br />
 <p align="center">
   <a href="https://github.com/sholtodouglas/learning_from_play">
-    <img src="media/logo.png" alt="Logo" width="80" height="80">
+    <img src="media/logo.png" alt="Logo" width="160" height="160">
 	<!-- Hand vector created by upklyak - www.freepik.com -->
   </a>
 
@@ -69,7 +69,6 @@
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
@@ -87,11 +86,8 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
-
-Here's a blank template to get started:
-**To avoid retyping too much info. Do a search and replace with your text editor for the following:**
-`sholtodouglas`, `learning_from_play`, `twitter_handle`, `email`, `project_title`, `project_description`
+<!-- ![Demo](media/demo.png) -->
+<img src="media/demo.jpg" width="300" height="300">
 
 
 ### Built With
