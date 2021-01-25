@@ -87,7 +87,9 @@
 ## About The Project
 
 <!-- ![Demo](media/demo.png) -->
-<img src="media/demo.jpg" width="300" height="300">
+<p align="center">
+	<img src="media/demo.jpg" width="300" height="300">
+</p>
 
 
 ### Built With
