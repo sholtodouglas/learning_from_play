@@ -6,9 +6,11 @@ import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
 import tensorflow as tf
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 import os
 import numpy as np
+from natsort import natsorted
+import sklearn
+
 
 # Alternatively we could just add other repos to pythonpath
 def build_dataset_from_mjl(base_path='../relay-policy-learning', num_cpus=1):
@@ -25,8 +27,8 @@ def build_dataset_from_mjl(base_path='../relay-policy-learning', num_cpus=1):
         print(path)
         cmd = f'python3 relay-policy-learning/adept_envs/adept_envs/utils/parse_demos.py --env "kitchen_relax-v1" -d "{path}/" -s "40" -v "playback" -r "offscreen"'
         results.append(pool.apply_async(call_proc, (cmd,)))
-        
- 
+
+
 
     # Close the pool and wait for each running task to complete
     pool.close()
@@ -59,132 +61,168 @@ def create_single_dataset(base_path='../relay-policy-learning'):
 
     return traj_dicts, cnt
 
-class PyBulletRobotSeqDataset():
-    def __init__(self, dataset, batch_size=64, seq_len=32, overlap=1.0, 
-                 prefetch_size=AUTOTUNE, train_test_split=0.9, relative_joints=False, 
-                 variable_seqs=True, seed=42):
-        self.N_TRAJS = len(dataset)
+### Play dataset
 
-        # Split into train and validation datasets
-        # List of trajectory dicts
-        if train_test_split == 'last': # just use the last set of demos as validation
-            self._train_data = dataset[:-1] #[:-1] # raw data - private
-            self._valid_data = dataset[-1:]
-        else:
-            self._train_data = dataset[:int(self.N_TRAJS*train_test_split)] # raw data - private
-            self._valid_data = dataset[int(self.N_TRAJS*train_test_split):]
-        self.train_data = []
-        self.valid_data = []
-        self.BATCH_SIZE = batch_size
-        self.PREFETCH_SIZE = prefetch_size
-        self.OVERLAP = overlap
-        self.relative_joints = relative_joints
+class PlayDataloader():
+    def __init__(self, 
+                relative_obs=False,
+                relative_act=False,
+                quaternion=False,
+                joints=False,
+                velocity=False,
+                normalize=False,
+                proprioception=False,
+
+                batch_size=32, # 512*8
+                window_size=50,
+                min_window_size=20,
+                window_shift=1,
+                variable_seqs=True, 
+                num_workers=4,
+                seed=42):
+        
+        self.relative_obs = relative_obs
+        self.relative_act = relative_act
+        self.quaternion = quaternion
+        self.joints = joints
+        self.velocity = velocity
+        self.normalize = normalize
+        self.proprioception = proprioception
+        
+        self.batch_size = batch_size
+        self.window_size = window_size
+        self.min_window_size = min_window_size
+        self.window_shift = window_shift
         self.variable_seqs = variable_seqs
-
-        self.MAX_SEQ_LEN = seq_len ## 40 for example
-        self.MIN_SEQ_LEN = seq_len // 2 # so like 20
-        if self.relative_joints:
-          self.OBS_DIM  = dataset[0]['obs'].shape[-1] + dataset[0]['joint_poses'].shape[-1] 
-        else:
-          self.OBS_DIM = dataset[0]['obs'].shape[-1]
-        if self.relative_joints:
-            self.ACT_DIM = dataset[0]['target_poses'].shape[-1] + 1 # +1 for the gripper
-        else:
-            self.ACT_DIM = dataset[0]['acts'].shape[-1]
-            
-        self.GOAL_DIM = dataset[0]['achieved_goals'].shape[-1] # 2 objects (xyz quat) + 4 uni dim = 18
-
-        self.random_obj = random.Random(seed)
-
-    def create_goal(self, trajectory, ti, tf):
-        return np.tile(trajectory['achieved_goals'][tf, :], (tf-ti,1)) # Be wary of changing this, the planner relies on the fact that final goal is tiled out.
-
-    def traj_to_subtrajs(self, trajectory, idx):
-        """
-        Converts a T-length trajectory into M subtrajectories of length SEQ_LEN, pads time dim to SEQ_LEN
-        """
-        T = len(trajectory['obs'])
-        frame_skip = max(int(self.MAX_SEQ_LEN*self.OVERLAP),1)
-        obs, goals, acts, masks, stored_seq_lens = [], [], [], [], [] # to save us compute time don't calc the seq len from the mask in training. 
-        for ti in range(0,T-self.MAX_SEQ_LEN,frame_skip):
-            if self.variable_seqs:
-              seq_lens = list(self.MAX_SEQ_LEN - np.arange(0, self.MAX_SEQ_LEN-self.MIN_SEQ_LEN, 4)) #create an array of SEQ LENS with spacing 4
-              
-            else:
-              seq_lens = [self.MAX_SEQ_LEN]
-            
-            for seq_len in seq_lens:
-              tf = ti + seq_len
-                  
-              pad_len = self.MAX_SEQ_LEN-(tf-ti)
-              time_padding = ((0,pad_len),(0,0))
-              
-              if self.relative_joints:
-                  rel = trajectory['target_poses'][ti:tf] - trajectory['joint_poses'][ti:tf, :7]
-                  gripper = np.expand_dims(trajectory['acts'][ti:tf, -1], -1)
-                  action = np.pad(np.concatenate([rel, gripper], -1), time_padding)
-                  o = np.concatenate([trajectory['obs'][ti:tf,:],trajectory['joint_poses'][ti:tf,:]],-1).astype('float32')
-              else:
-                  action = np.pad(trajectory['acts'][ti:tf], time_padding)
-                  o = trajectory['obs'][ti:tf,:]
-              
-              obs.append(np.pad(o, time_padding))
-              goals.append(np.pad(self.create_goal(trajectory, ti, tf), time_padding))
-              acts.append(action)
-              masks.append(np.pad(np.ones(tf-ti), time_padding[0]))
-              stored_seq_lens.append([seq_len])
+        self.shuffle_size = int(batch_size * (window_size / window_shift))
+        self.prefetch_size = tf.data.experimental.AUTOTUNE
+        self.num_workers = num_workers
+        self.seed=seed
         
-        return np.stack(obs), np.stack(goals), np.stack(acts), np.stack(masks), np.stack(stored_seq_lens)
+    @staticmethod
+    def print_minutes(dataset):
+        dataset_size = dataset['obs'].shape[0]
+        secs = dataset_size / 25
+        hours = secs // 3600
+        minutes = secs // 60 - hours * 60
+        print(f"{dataset_size} frames, which is {hours:.0f}hrs {minutes:.0f}m.")
+        
+    def create_goal_tensor(self, dataset, seq_len=-1):
+        ''' Tile final achieved_goal across time dimension '''
+        tile_dims = tf.constant([self.window_size, 1], tf.int32)
+        goal = tf.tile(dataset['achieved_goals'][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
+        return goal
+        
+    def extract(self, paths):
+        keys = ['obs','acts','achieved_goals','joint_poses','target_poses','acts_rpy','acts_rpy_rel','velocities','obs_rpy','proprioception']
+        dataset = {k:[] for k in keys+['sequence_index','sequence_id']}
 
-    def create_tf_ds(self, is_training=True):
-        """ Converts raw dataset to a shuffled subtraj dataset """
-        dataset = self._train_data if is_training else self._valid_data
-        obs, goals, acts, masks, seq_lens = [], [], [], [], []
-        total_number_of_subtrajs = 0
-        for idx, train_sample in enumerate(dataset):
-            o,g,a,m,sl = self.traj_to_subtrajs(train_sample, idx)
-            obs.append(o)
-            goals.append(g)
-            acts.append(a)
-            masks.append(m)
+        for path in paths:
+            obs_act_path = os.path.join(path, 'obs_act_etc/')
+            for demo in natsorted(os.listdir(obs_act_path)):
+                traj = np.load(obs_act_path+demo+'/data.npz')
+                for k in keys:
+                    d = traj[k]
+                    if len(d.shape) < 2:
+                        d = np.expand_dims(d, axis = 1) # was N, should be N,1
+                    dataset[k].append(d.astype(np.float32))
+                timesteps = len(traj['obs'])
+                dataset['sequence_index'].append(np.arange(timesteps, dtype=np.int32).reshape(-1, 1))
+                dataset['sequence_id'].append(np.full(timesteps, fill_value=int(demo), dtype=np.int32).reshape(-1, 1))
+
+        # convert to numpy
+        for k in keys+['sequence_index','sequence_id']:
+            dataset[k] = np.vstack(dataset[k])
             
-            seq_lens.append(sl)
-            total_number_of_subtrajs += len(o)
-
-        obs = np.vstack(obs)
-        goals = np.vstack(goals)
-        acts = np.vstack(acts).astype('float32')
-        masks = np.vstack(masks).astype('float32')
-        seq_lens = np.vstack(seq_lens).astype('float32')
-        print(f'Created {total_number_of_subtrajs} subtrajs')
-        ds = tf.data.Dataset.from_tensor_slices((obs, goals, acts, masks, seq_lens)) 
-        # Always shuffle, repeat then batch (in that order)
-        ds = ds.shuffle(len(obs))
-        ds = ds.repeat()
-        ds = ds.batch(self.BATCH_SIZE, drop_remainder=True)
-        ds = ds.prefetch(self.PREFETCH_SIZE)
-        # ds = ds.cache()
-        return ds
+        self.print_minutes(dataset)
+        return dataset
     
-    
-############## Everything from here for pybullet style #################################
-def load_data(path, keys):
-    cnt = Counter()
-    dataset = []
-    obs_act_path = os.path.join(path, 'obs_act_etc/')
+    def transform(self, dataset):
+        # State representations
+        if self.joints:
+            obs = tf.concat([dataset['obs'],dataset['joint_poses'][:,:7]], axis=-1)
+            gripper = dataset['acts'][:,-1,tf.newaxis]
+            acts = tf.concat([dataset['target_poses'], gripper], axis=-1)
+            acts_prev = tf.concat([dataset['joint_poses'][:,:6], gripper], axis=-1)
+        else: 
+            if self.quaternion:
+                # TODO: this is confusing me
+#                 obs = tf.concat([dataset['obs'],dataset['joint_poses'][:,:7]], axis=-1)
+#                 gripper = dataset['acts'][:,-1,tf.newaxis]
+#                 acts = tf.concat([dataset['acts'][:,:7], gripper], axis=-1)
+#                 acts_prev = tf.concat([dataset['obs'][:,:7], gripper], axis=-1)
+                pass
+            else: # RPY
+                # TODO:
+#                 obs = 
+#                 gripper = 
+#                 acts = 
+#                 acts_prev = 
+                pass
+        
+        if self.relative_obs:
+            obs = np.diff(obs, axis=0)
+        if self.relative_act:
+            acts = acts - acts_prev
+            
+        if self.velocity:
+            obs = tf.concat([obs, dataset['velocities']], axis=-1)
+        if self.proprioception:
+            obs = tf.concat([obs, dataset['proprioception']], axis=-1)
+            
+        # Variable Seq len
+        if self.variable_seqs:
+            seq_len = tf.random.uniform(shape=[], minval=self.min_window_size, 
+                                        maxval=self.window_size, dtype=tf.int32, seed=self.seed)
+            goals = self.create_goal_tensor(dataset, seq_len)
+            # Masking
+            mask = tf.cast(tf.sequence_mask(seq_len, maxlen=self.window_size), tf.float32) # creates a B*T mask
+            multiply_mask = tf.expand_dims(mask, -1)
 
-    for demo in os.listdir(obs_act_path):
+            obs *= multiply_mask
+            goals *= multiply_mask
+            acts *= multiply_mask
+        else:
+            seq_len = self.window_size
+            goals = self.create_goal_tensor(dataset, seq_len)
+          
+        # Key data dimensions
+        self.obs_dim = obs.shape[1]
+        self.goal_dim = goals.shape[1]
+        self.act_dim = acts.shape[1]
         
-        traj = np.load(obs_act_path+demo+'/data.npz')
-        traj = {key:traj[key] for key in keys}
-        reset_states = []
-        for i in range(0, len(traj[keys[0]])):
-            # these are needed for deterministic resetting
-            reset_states.append(path+'/states_and_ims/'+demo+'/env_states/'+str(i)+'.bullet')
-        traj['reset_states'] = reset_states
-        traj['reset_idx'] = int(demo)
-        dataset.append(traj)
+        # Preprocessing
+        if self.normalize:
+            sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
+            sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
+            sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
         
-        cnt[len(traj[keys[0]])]+=1
+        return {'obs':obs, 
+                'acts':acts, 
+                'goals':goals, 
+                'seq_lens': tf.cast(seq_len, tf.float32), 
+                'masks':mask, 
+                'dataset_path':dataset['sequence_id'], 
+                'tstep_idxs':dataset['sequence_index']}
+    
+    # TODO: why did we not need this before?? window_lambda is being weird
+    @tf.autograph.experimental.do_not_convert   
+    def load(self, dataset):
+        dataset = tf.data.Dataset.from_tensor_slices(dataset)
+        window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
+        seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
+        dataset = dataset\
+                .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)\
+                .flat_map(window_lambda)\
+                .filter(seq_overlap_filter)\
+                .shuffle(self.shuffle_size)\
+                .repeat()\
+                .map(self.transform, num_parallel_calls=self.num_workers)\
+                .batch(self.batch_size, drop_remainder=True)\
+                .prefetch(self.prefetch_size)
         
-    return dataset,cnt
+        self.obs_dim = dataset.element_spec['obs'].shape[-1]
+        self.goal_dim = dataset.element_spec['goals'].shape[-1]
+        self.act_dim = dataset.element_spec['acts'].shape[-1]
+        print(dataset.element_spec)
+        return dataset
