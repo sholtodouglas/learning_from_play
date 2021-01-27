@@ -13,3 +13,4 @@ config.py
 /__pycache__/*
 lfp_venv
 /recordings/*
+/data/*

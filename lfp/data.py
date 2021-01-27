@@ -11,63 +11,13 @@ import numpy as np
 from natsort import natsorted
 import sklearn
 
-
-# Alternatively we could just add other repos to pythonpath
-def build_dataset_from_mjl(base_path='../relay-policy-learning', num_cpus=1):
-    def call_proc(cmd):
-        """ This runs in a separate thread. """
-        p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        return (out, err)
-
-    # Probably do 1-2 CPUs - using all CPUs will make you computer completely unusable
-    pool = ThreadPool(num_cpus) # multiprocessing.cpu_count()
-    results = []
-    for path in glob.glob(base_path+'/kitchen_demos_multitask/*'):
-        print(path)
-        cmd = f'python3 relay-policy-learning/adept_envs/adept_envs/utils/parse_demos.py --env "kitchen_relax-v1" -d "{path}/" -s "40" -v "playback" -r "offscreen"'
-        results.append(pool.apply_async(call_proc, (cmd,)))
-
-
-
-    # Close the pool and wait for each running task to complete
-    pool.close()
-    pool.join()
-    for result in results:
-        out, err = result.get()
-        print(f"out: {out.decode()}")
-        print(f"err: {err.decode()}")
-
-def create_single_dataset(base_path='../relay-policy-learning'):
-    """
-    Takes in a filepath a loads all pickle files into one big list
-    :return:
-    observations - list of observation arrays
-    actions - list of action arrays
-    cnt - counter object for plotting distribution of seq lens
-    """
-    traj_dicts = []
-    MAX_SEQ_LEN = 0 # overall max of the dataset is 409 - this is overkill
-    cnt = Counter()
-
-    filenames = glob.glob(base_path+'/kitchen_demos_multitask/*/*.pkl')
-    random.Random(42).shuffle(filenames) # shuffle the order of trajectory files
-
-    for path in filenames:
-        with open(path, 'rb') as f:
-            traj_dict = pickle.load(f)
-        traj_dicts.append(traj_dict)
-        cnt[len(traj_dict['observations'])]+=1
-
-    return traj_dicts, cnt
-
 ### Play dataset
 
 class PlayDataloader():
     def __init__(self, 
                 relative_obs=False,
                 relative_act=False,
-                quaternion=False,
+                quaternion_act=False,
                 joints=False,
                 velocity=False,
                 normalize=False,
@@ -83,7 +33,7 @@ class PlayDataloader():
         
         self.relative_obs = relative_obs
         self.relative_act = relative_act
-        self.quaternion = quaternion
+        self.quaternion_act = quaternion_act
         self.joints = joints
         self.velocity = velocity
         self.normalize = normalize
@@ -114,7 +64,7 @@ class PlayDataloader():
         return goal
         
     def extract(self, paths):
-        keys = ['obs','acts','achieved_goals','joint_poses','target_poses','acts_rpy','acts_rpy_rel','velocities','obs_rpy','proprioception']
+        keys = ['obs','acts','achieved_goals','joint_poses','target_poses','acts_quat','acts_rpy_rel','velocities','obs_quat','proprioception']
         dataset = {k:[] for k in keys+['sequence_index','sequence_id']}
 
         for path in paths:
@@ -139,32 +89,32 @@ class PlayDataloader():
     
     def transform(self, dataset):
         # State representations
-        if self.joints:
-            obs = tf.concat([dataset['obs'],dataset['joint_poses'][:,:7]], axis=-1)
-            gripper = dataset['acts'][:,-1,tf.newaxis]
-            acts = tf.concat([dataset['target_poses'], gripper], axis=-1)
-            acts_prev = tf.concat([dataset['joint_poses'][:,:6], gripper], axis=-1)
-        else: 
-            if self.quaternion:
-                # TODO: this is confusing me
-#                 obs = tf.concat([dataset['obs'],dataset['joint_poses'][:,:7]], axis=-1)
-#                 gripper = dataset['acts'][:,-1,tf.newaxis]
-#                 acts = tf.concat([dataset['acts'][:,:7], gripper], axis=-1)
-#                 acts_prev = tf.concat([dataset['obs'][:,:7], gripper], axis=-1)
-                pass
-            else: # RPY
-                # TODO:
-#                 obs = 
-#                 gripper = 
-#                 acts = 
-#                 acts_prev = 
-                pass
+        obs = dataset['obs']
         
+        # act in joint space
+        if self.joints:
+            obs = tf.concat([obs,dataset['joint_poses'][:,:7]], axis=-1)
+            acts = dataset['target_poses']
+            if self.relative_act:
+                acts = acts - dataset['joint_poses'][:,:6]
+
+        # act in position space with quaternions
+        elif self.quaternion_act:
+                acts = dataset['acts_quat'][:,:7]
+                if self.relative_act:
+                    acts = acts  - dataset['obs_quat'][:,:7]
+        # act in rpy position space            
+        else:
+            acts = dataset['acts'][:,:6]
+            if self.relative_act:
+                acts = acts - dataset['obs'][:,:6]
+                
+        # add the gripper on the end
+        gripper = dataset['acts'][:,-1,tf.newaxis]
+        acts = tf.concat([acts, gripper], axis=-1)
+
         if self.relative_obs:
             obs = np.diff(obs, axis=0)
-        if self.relative_act:
-            acts = acts - acts_prev
-            
         if self.velocity:
             obs = tf.concat([obs, dataset['velocities']], axis=-1)
         if self.proprioception:
