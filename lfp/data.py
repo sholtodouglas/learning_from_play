@@ -13,6 +13,75 @@ import sklearn
 
 ### Play dataset
 
+# TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
+def decode_image(image_data):
+    image = tf.image.decode_jpeg(image_data, channels=3)
+    image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
+    image = tf.reshape(image, [200,200, 3]) # explicit size needed for TPU
+    return image
+
+def read_tfrecord(example):
+    LABELED_TFREC_FORMAT = {
+            'obs': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'acts': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'achieved_goals': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'joint_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'target_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'acts_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'acts_rpy_rel': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'velocities': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'obs_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'proprioception': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'sequence_index': tf.io.FixedLenFeature([], tf.int64),
+            'sequence_id': tf.io.FixedLenFeature([], tf.int64),
+            'img': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+    }
+    data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+    
+    obs = tf.io.parse_tensor(data['obs'], tf.float32) 
+    acts = tf.io.parse_tensor(data['acts'], tf.float32) 
+    achieved_goals = tf.io.parse_tensor(data['achieved_goals'], tf.float32)  
+    joint_poses = tf.io.parse_tensor(data['joint_poses'], tf.float32)  
+    target_poses = tf.io.parse_tensor(data['target_poses'], tf.float32) 
+    acts_quat =tf.io.parse_tensor( data['acts_quat'], tf.float32) 
+    acts_rpy_rel = tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32)  
+    velocities = tf.io.parse_tensor(data['velocities'], tf.float32) 
+    obs_quat = tf.io.parse_tensor(data['obs_quat'], tf.float32) 
+    proprioception = tf.io.parse_tensor(data['proprioception'], tf.float32)  
+    sequence_index = tf.cast(data['sequence_index'], tf.int32) 
+    sequence_id = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
+    
+    img = decode_image(data['img'])
+
+    return {'obs' : obs, 
+            'acts' : acts, 
+            'achieved_goals' : achieved_goals, 
+            'joint_poses' : joint_poses, 
+            'target_poses' : target_poses, 
+            'acts_quat' : acts_quat, 
+            'acts_rpy_rel' : acts_rpy_rel, 
+            'velocities' : velocities, 
+            'obs_quat' : obs_quat, 
+            'proprioception' : proprioception, 
+            'sequence_index' : sequence_index, 
+            'sequence_id' : sequence_id,
+            'img' : img}
+
+def load_tf_records(filenames, ordered=False):
+    # Read from TFRecords. For optimal performance, reading from multiple files at once and
+    # disregarding data order. Order does not matter since we will be shuffling the data anyway.
+
+    # check, does this ignore intra order or just inter order? Both are an issue!
+    ignore_order = tf.data.Options()
+    if not ordered:
+        ignore_order.experimental_deterministic = False # disable order, increase speed
+
+    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=1) # automatically interleaves reads from multiple files - keep it at 1 we need the order
+    dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
+    dataset = dataset.map(read_tfrecord, num_parallel_calls=1)
+    return dataset
+
+
 class PlayDataloader():
     def __init__(self, 
                 relative_obs=False,
@@ -22,7 +91,6 @@ class PlayDataloader():
                 velocity=False,
                 normalize=False,
                 proprioception=False,
-
                 batch_size=32, # 512*8
                 window_size=50,
                 min_window_size=20,
@@ -48,6 +116,8 @@ class PlayDataloader():
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
         self.seed=seed
+        self.mean_obs, self.std_obs, self.mean_acts, self.standard_acts = None, None, None,None
+        # Todo redo the standardisation find original version here https://github.com/sholtodouglas/learning_from_play/blob/9f385c0c80f905da63b9954e192dac696559e163/languageXplay.ipynb
         
     @staticmethod
     def print_minutes(dataset):
@@ -85,6 +155,7 @@ class PlayDataloader():
             dataset[k] = np.vstack(dataset[k])
             
         self.print_minutes(dataset)
+            
         return dataset
     
     def transform(self, dataset):
@@ -143,9 +214,10 @@ class PlayDataloader():
         
         # Preprocessing
         if self.normalize:
-            sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
+            # Record the mean like we used to @Tristan
+            sklearn.preprocessing.normalize(obs, norm='l2', axis=0, copy=False)
+            sklearn.preprocessing.normalize(goals, norm='l2', axis=0, copy=False)
+            sklearn.preprocessing.normalize(acts, norm='l2', axis=0, copy=False)
         
         return {'obs':obs, 
                 'acts':acts, 
@@ -158,7 +230,15 @@ class PlayDataloader():
     # TODO: why did we not need this before?? window_lambda is being weird
     @tf.autograph.experimental.do_not_convert   
     def load(self, dataset):
-        dataset = tf.data.Dataset.from_tensor_slices(dataset)
+        '''
+        Pass dataset as a list if we want it to load from TF record locations
+        Pass it a dict if we want to load from tensorslices
+        '''
+        if isinstance(dataset,list):
+            dataset = load_tf_records(dataset, ordered=True)
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices(dataset)
+            
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
         seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
         dataset = dataset\
@@ -176,3 +256,21 @@ class PlayDataloader():
         self.act_dim = dataset.element_spec['acts'].shape[-1]
         print(dataset.element_spec)
         return dataset
+    
+    
+    
+def find_quantisation_scaling(dataset, dataloader, num_quantiles=256):
+  if dataloader.quaternion_act or dataloader.joints:
+    raise NotImplementedError
+  else:
+    max = np.max(dataset['acts'], 0)
+    min = np.min(dataset['acts'], 0)
+    scaling  = np.array([1.5, 1.5, 2.2, 3.2,3.2,3.2,1.1])
+    assert (-scaling < min).all() and (scaling > max).all()
+    # now, as it is quantised into 256 categories, we need to multiply this by 2 (as we want 'total range') /256. Explain better later - see review and analysis 
+    # for empirical proof. This will let us go +/- 1.5 (quantised into 256 bins), but that the neural net output is == the actual output before quantisation.
+    # it gets upscaled for the 256 integers, then downscaled by the inverse of this. 
+  scaling = 256.0 / (scaling*2)
+  scaling = tf.cast(tf.constant(scaling), tf.float32)
+
+  return scaling
