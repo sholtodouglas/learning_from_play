@@ -25,6 +25,12 @@ class MaxMetric(tf.keras.metrics.Metric):
 def record(value, metric):
     metric.update_state(value)
     return value
+
+
+def log(metric):
+    result = metric.result()
+    metric.reset_states()
+    return result
     
 def create_metrics():
     train_loss = tf.keras.metrics.Mean(name='train_loss')
