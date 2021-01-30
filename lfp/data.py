@@ -9,6 +9,15 @@ from tqdm import tqdm
 
 pp = pprint.PrettyPrinter(indent=4)
 
+
+
+def get_tf_records(PATHS, bucket_name):
+    record_paths = []
+    folder_names = ["data/"+str(p) for p in PATHS]
+    for p in folder_names: # pass a list of folders and it will find the tf records in them
+        record_paths += tf.io.gfile.glob(f"gs://{bucket_name}/{p}/tf_records/*")
+    return record_paths
+
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_image(image_data):
     image = tf.image.decode_jpeg(image_data, channels=3)
