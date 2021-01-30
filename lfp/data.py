@@ -231,11 +231,21 @@ class PlayDataloader():
     @tf.autograph.experimental.do_not_convert   
     def load(self, dataset):
         '''
-        Pass dataset as a list if we want it to load from TF record locations
-        Pass it a dict if we want to load from tensorslices
+        Pass dataset as a list if we want it to load from TF record locations (images included in the TF records)
+        Usage:
+            valid_dataset = dataloader.load([TEST_DATA_PATH])
+        
+        Pass it a dict if we want to load from tensorslices derived from the npz files (no images)
+        Usage:
+            valid_data = dataloader.extract([TEST_DATA_PATH])
+            valid_dataset = dataloader.load(valid_data)
         '''
         if isinstance(dataset,list):
-            dataset = load_tf_records(dataset, ordered=True)
+            record_paths = []
+            for p in dataset: # pass a list of folders and it will find the tf records in them
+                record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
+
+            dataset = load_tf_records(record_paths, ordered=True)
         else:
             dataset = tf.data.Dataset.from_tensor_slices(dataset)
             
