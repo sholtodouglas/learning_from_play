@@ -83,6 +83,8 @@ def extract_npz(paths):
     # convert to numpy
     for k in keys + ['sequence_index', 'sequence_id']:
         dataset[k] = np.vstack(dataset[k])
+    # convert to tf dataset
+    dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
 def extract_tfrecords(paths, ordered=True, num_workers=tf.data.experimental.AUTOTUNE):
@@ -164,7 +166,10 @@ class PlayDataloader():
         :return:
         """
         if from_tfrecords:
-            dataset = extract_tfrecords(paths, num_workers=self.num_workers)
+            record_paths = []
+            for p in paths:
+                record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
+            dataset = extract_tf_records(record_paths, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
         self.print_minutes(dataset)
@@ -249,17 +254,9 @@ class PlayDataloader():
     def load(self, dataset):
         """
 
-        :param dataset:
+        :param dataset: a tf Dataset
         :return:
         """
-        if isinstance(dataset,list):
-            record_paths = []
-            for p in dataset: # pass a list of folders and it will find the tf records in them
-                record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
-
-            dataset = self.extract_tf_records(record_paths, ordered=True)
-        else:
-            dataset = tf.data.Dataset.from_tensor_slices(dataset)
             
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
         seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
