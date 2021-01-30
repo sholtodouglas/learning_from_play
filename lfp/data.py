@@ -1,17 +1,12 @@
 import glob
-import pickle
-import random
-from collections import Counter
-import subprocess
-import shlex
-from multiprocessing.pool import ThreadPool
 import tensorflow as tf
 import os
 import numpy as np
 from natsort import natsorted
 import sklearn
+import pprint
 
-### Play dataset
+pp = pprint.PrettyPrinter(indent=4)
 
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_image(image_data):
@@ -67,10 +62,50 @@ def read_tfrecord(example):
             'sequence_id' : sequence_id,
             'img' : img}
 
+def extract_npz(paths):
+    keys = ['obs', 'acts', 'achieved_goals', 'joint_poses', 'target_poses', 'acts_quat', 'acts_rpy_rel',
+            'velocities', 'obs_quat', 'proprioception']
+    dataset = {k: [] for k in keys + ['sequence_index', 'sequence_id']}
 
+    for path in paths:
+        obs_act_path = os.path.join(path, 'obs_act_etc/')
+        for demo in natsorted(os.listdir(obs_act_path)):
+            traj = np.load(obs_act_path + demo + '/data.npz')
+            for k in keys:
+                d = traj[k]
+                if len(d.shape) < 2:
+                    d = np.expand_dims(d, axis=1)  # was N, should be N,1
+                dataset[k].append(d.astype(np.float32))
+            timesteps = len(traj['obs'])
+            dataset['sequence_index'].append(np.arange(timesteps, dtype=np.int32).reshape(-1, 1))
+            dataset['sequence_id'].append(np.full(timesteps, fill_value=int(demo), dtype=np.int32).reshape(-1, 1))
+
+    # convert to numpy
+    for k in keys + ['sequence_index', 'sequence_id']:
+        dataset[k] = np.vstack(dataset[k])
+    return dataset
+
+def extract_tfrecords(paths, ordered=True, num_workers=tf.data.experimental.AUTOTUNE):
+    # In our case, order does matter
+    tf_options = tf.data.Options()
+    tf_options.experimental_deterministic = ordered  # disable order, increase speed
+
+    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_workers)
+    dataset = dataset.with_options(tf_options)
+    dataset = dataset.map(read_tfrecord, num_parallel_calls=num_workers)
+    return dataset
 
 
 class PlayDataloader():
+    """
+    Usage:
+    1. From npz (i.e. without images)
+        dataset = dataloader.extract(paths)
+        dataset = dataloader.load(dataset)
+    2. From tf_records (i.e. with images)
+        dataset = dataloader.extract(paths, from_tfrecords=True)
+        dataset = dataloader.load(dataset)
+    """
     def __init__(self, 
                 relative_obs=False,
                 relative_act=False,
@@ -106,7 +141,7 @@ class PlayDataloader():
         self.seed=seed
         self.mean_obs, self.std_obs, self.mean_acts, self.standard_acts = None, None, None,None
         # Todo redo the standardisation find original version here https://github.com/sholtodouglas/learning_from_play/blob/9f385c0c80f905da63b9954e192dac696559e163/languageXplay.ipynb
-        
+
     @staticmethod
     def print_minutes(dataset):
         dataset_size = dataset['obs'].shape[0]
@@ -114,51 +149,33 @@ class PlayDataloader():
         hours = secs // 3600
         minutes = secs // 60 - hours * 60
         print(f"{dataset_size} frames, which is {hours:.0f}hrs {minutes:.0f}m.")
-        
+
     def create_goal_tensor(self, dataset, seq_len=-1):
         ''' Tile final achieved_goal across time dimension '''
         tile_dims = tf.constant([self.window_size, 1], tf.int32)
         goal = tf.tile(dataset['achieved_goals'][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
         return goal
         
-    def extract(self, paths):
-        keys = ['obs','acts','achieved_goals','joint_poses','target_poses','acts_quat','acts_rpy_rel','velocities','obs_quat','proprioception']
-        dataset = {k:[] for k in keys+['sequence_index','sequence_id']}
+    def extract(self, paths, from_tfrecords=False):
+        """
 
-        for path in paths:
-            obs_act_path = os.path.join(path, 'obs_act_etc/')
-            for demo in natsorted(os.listdir(obs_act_path)):
-                traj = np.load(obs_act_path+demo+'/data.npz')
-                for k in keys:
-                    d = traj[k]
-                    if len(d.shape) < 2:
-                        d = np.expand_dims(d, axis = 1) # was N, should be N,1
-                    dataset[k].append(d.astype(np.float32))
-                timesteps = len(traj['obs'])
-                dataset['sequence_index'].append(np.arange(timesteps, dtype=np.int32).reshape(-1, 1))
-                dataset['sequence_id'].append(np.full(timesteps, fill_value=int(demo), dtype=np.int32).reshape(-1, 1))
-
-        # convert to numpy
-        for k in keys+['sequence_index','sequence_id']:
-            dataset[k] = np.vstack(dataset[k])
-            
+        :param paths:
+        :param from_tfrecords:
+        :return:
+        """
+        if from_tfrecords:
+            dataset = extract_tfrecords(paths, num_workers=self.num_workers)
+        else:
+            dataset = extract_npz(paths)
         self.print_minutes(dataset)
-            
-        return dataset
-    
-    
-    def extract_tf_records(self, filenames, ordered=True):
-        # In our case, order does matter
-        ignore_order = tf.data.Options()
-        if not ordered:
-            ignore_order.experimental_deterministic = False # disable order, increase speed
-
-        dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=self.num_workers) 
-        dataset = dataset.with_options(ignore_order) 
-        dataset = dataset.map(read_tfrecord, num_parallel_calls=self.num_workers)
         return dataset
     
     def transform(self, dataset):
+        """
+
+        :param dataset:
+        :return:
+        """
         # State representations
         obs = dataset['obs']
         
@@ -215,9 +232,9 @@ class PlayDataloader():
         # Preprocessing
         if self.normalize:
             # Record the mean like we used to @Tristan
-            sklearn.preprocessing.normalize(obs, norm='l2', axis=0, copy=False)
-            sklearn.preprocessing.normalize(goals, norm='l2', axis=0, copy=False)
-            sklearn.preprocessing.normalize(acts, norm='l2', axis=0, copy=False)
+            sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
+            sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
+            sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
         
         return {'obs':obs, 
                 'acts':acts, 
@@ -230,16 +247,11 @@ class PlayDataloader():
     # TODO: why did we not need this before?? window_lambda is being weird
     @tf.autograph.experimental.do_not_convert   
     def load(self, dataset):
-        '''
-        Pass dataset as a list if we want it to load from TF record locations (images included in the TF records)
-        Usage:
-            valid_dataset = dataloader.load([TEST_DATA_PATH])
-        
-        Pass it a dict if we want to load from tensorslices derived from the npz files (no images)
-        Usage:
-            valid_data = dataloader.extract([TEST_DATA_PATH])
-            valid_dataset = dataloader.load(valid_data)
-        '''
+        """
+
+        :param dataset:
+        :return:
+        """
         if isinstance(dataset,list):
             record_paths = []
             for p in dataset: # pass a list of folders and it will find the tf records in them
@@ -264,7 +276,7 @@ class PlayDataloader():
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
-        print(dataset.element_spec)
+        pp.pprint(dataset.element_spec)
         return dataset
     
     
