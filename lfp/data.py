@@ -158,6 +158,16 @@ class PlayDataloader():
         tile_dims = tf.constant([self.window_size, 1], tf.int32)
         goal = tf.tile(dataset['achieved_goals'][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
         return goal
+
+    def validate_action_label(self, acts):
+        if self.quaternion_act or self.joints:
+            raise tf.errors.NotImplementedError
+        else:
+            action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
+            tf.debugging.Assert(tf.logical_and(tf.reduce_all(-action_limits < acts),
+                                               tf.reduce_all(action_limits > acts)),
+                                data=[acts],
+                                name="act_limit_validation")
         
     def extract(self, paths, from_tfrecords=False):
         """
@@ -280,22 +290,3 @@ class PlayDataloader():
         self.act_dim = dataset.element_spec['acts'].shape[-1]
         pp.pprint(dataset.element_spec)
         return dataset
-
-    # def validate_labels(self, dataset):
-    #     if self.quaternion_act or self.joints:
-    #         raise NotImplementedError
-    #     else:
-    #         action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
-    #         for x in tqdm(dataset, desc='Validating'):
-    #             assert tf.reduce_all(-action_limits < x['acts']) and tf.reduce_all(action_limits > x['acts']), \
-    #                     f"Action label violated action limits: {x['acts']}"
-
-    def validate_action_label(self, acts):
-        if self.quaternion_act or self.joints:
-            raise tf.errors.NotImplementedError
-        else:
-            action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
-            tf.debugging.Assert(tf.logical_and(tf.reduce_all(-action_limits < acts),
-                                               tf.reduce_all(action_limits > acts)),
-                                data=[acts],
-                                name="act_limit_validation")
