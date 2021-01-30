@@ -5,6 +5,7 @@ import numpy as np
 from natsort import natsorted
 import sklearn
 import pprint
+from tqdm import tqdm
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -69,7 +70,7 @@ def extract_npz(paths):
 
     for path in paths:
         obs_act_path = os.path.join(path, 'obs_act_etc/')
-        for demo in natsorted(os.listdir(obs_act_path)):
+        for demo in tqdm(natsorted(os.listdir(obs_act_path)), desc=path.name):
             traj = np.load(obs_act_path + demo + '/data.npz')
             for k in keys:
                 d = traj[k]
@@ -146,7 +147,7 @@ class PlayDataloader():
 
     @staticmethod
     def print_minutes(dataset):
-        dataset_size = dataset['obs'].shape[0]
+        dataset_size = sum(1 for _ in dataset)
         secs = dataset_size / 25
         hours = secs // 3600
         minutes = secs // 60 - hours * 60
@@ -169,10 +170,11 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tf_records(record_paths, ordered=True, num_workers=self.num_workers)
+            dataset = extract_tfrecords(record_paths, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
-        self.print_minutes(dataset)
+        # self.print_minutes(dataset)
+        # self.validate_labels(dataset)
         return dataset
     
     def transform(self, dataset):
@@ -181,6 +183,9 @@ class PlayDataloader():
         :param dataset:
         :return:
         """
+        # Action limit validation
+        self.validate_action_label(dataset['acts'])
+
         # State representations
         obs = dataset['obs']
         
@@ -250,7 +255,7 @@ class PlayDataloader():
                 'tstep_idxs':dataset['sequence_index']}
     
     # TODO: why did we not need this before?? window_lambda is being weird
-    @tf.autograph.experimental.do_not_convert   
+    @tf.autograph.experimental.do_not_convert
     def load(self, dataset):
         """
 
@@ -275,21 +280,22 @@ class PlayDataloader():
         self.act_dim = dataset.element_spec['acts'].shape[-1]
         pp.pprint(dataset.element_spec)
         return dataset
-    
-    
-    
-def find_quantisation_scaling(dataset, dataloader, num_quantiles=256):
-  if dataloader.quaternion_act or dataloader.joints:
-    raise NotImplementedError
-  else:
-    max = np.max(dataset['acts'], 0)
-    min = np.min(dataset['acts'], 0)
-    scaling  = np.array([1.5, 1.5, 2.2, 3.2,3.2,3.2,1.1])
-    assert (-scaling < min).all() and (scaling > max).all()
-    # now, as it is quantised into 256 categories, we need to multiply this by 2 (as we want 'total range') /256. Explain better later - see review and analysis 
-    # for empirical proof. This will let us go +/- 1.5 (quantised into 256 bins), but that the neural net output is == the actual output before quantisation.
-    # it gets upscaled for the 256 integers, then downscaled by the inverse of this. 
-  scaling = 256.0 / (scaling*2)
-  scaling = tf.cast(tf.constant(scaling), tf.float32)
 
-  return scaling
+    # def validate_labels(self, dataset):
+    #     if self.quaternion_act or self.joints:
+    #         raise NotImplementedError
+    #     else:
+    #         action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
+    #         for x in tqdm(dataset, desc='Validating'):
+    #             assert tf.reduce_all(-action_limits < x['acts']) and tf.reduce_all(action_limits > x['acts']), \
+    #                     f"Action label violated action limits: {x['acts']}"
+
+    def validate_action_label(self, acts):
+        if self.quaternion_act or self.joints:
+            raise tf.errors.NotImplementedError
+        else:
+            action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
+            tf.debugging.Assert(tf.logical_and(tf.reduce_all(-action_limits < acts),
+                                               tf.reduce_all(action_limits > acts)),
+                                data=[acts],
+                                name="act_limit_validation")
