@@ -67,19 +67,7 @@ def read_tfrecord(example):
             'sequence_id' : sequence_id,
             'img' : img}
 
-def load_tf_records(filenames, ordered=False):
-    # Read from TFRecords. For optimal performance, reading from multiple files at once and
-    # disregarding data order. Order does not matter since we will be shuffling the data anyway.
 
-    # check, does this ignore intra order or just inter order? Both are an issue!
-    ignore_order = tf.data.Options()
-    if not ordered:
-        ignore_order.experimental_deterministic = False # disable order, increase speed
-
-    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=1) # automatically interleaves reads from multiple files - keep it at 1 we need the order
-    dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
-    dataset = dataset.map(read_tfrecord, num_parallel_calls=1)
-    return dataset
 
 
 class PlayDataloader():
@@ -91,12 +79,12 @@ class PlayDataloader():
                 velocity=False,
                 normalize=False,
                 proprioception=False,
-                batch_size=32, # 512*8
+                batch_size=32, # 512*8 with the TPU
                 window_size=50,
                 min_window_size=20,
                 window_shift=1,
                 variable_seqs=True, 
-                num_workers=4,
+                num_workers=tf.data.experimental.AUTOTUNE,
                 seed=42):
         
         self.relative_obs = relative_obs
@@ -156,6 +144,18 @@ class PlayDataloader():
             
         self.print_minutes(dataset)
             
+        return dataset
+    
+    
+    def extract_tf_records(self, filenames, ordered=True):
+        # In our case, order does matter
+        ignore_order = tf.data.Options()
+        if not ordered:
+            ignore_order.experimental_deterministic = False # disable order, increase speed
+
+        dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=self.num_workers) 
+        dataset = dataset.with_options(ignore_order) 
+        dataset = dataset.map(read_tfrecord, num_parallel_calls=self.num_workers)
         return dataset
     
     def transform(self, dataset):
@@ -245,7 +245,7 @@ class PlayDataloader():
             for p in dataset: # pass a list of folders and it will find the tf records in them
                 record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
 
-            dataset = load_tf_records(record_paths, ordered=True)
+            dataset = self.extract_tf_records(record_paths, ordered=True)
         else:
             dataset = tf.data.Dataset.from_tensor_slices(dataset)
             
