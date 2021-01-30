@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import tensorflow as tf
-def save_weights(path, actor, configs, dl, run_id, encoder=None, planner=None, step=""):
+def save_weights(path, actor, config, dl, run_id, optimizer, encoder=None, planner=None, step=""):
     os.makedirs(path, exist_ok=True)
 
     print('Saving model weights...')
