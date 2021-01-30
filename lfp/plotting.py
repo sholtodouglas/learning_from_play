@@ -2,6 +2,7 @@ import umap
 import matplotlib.pyplot as plt
 import numpy as np 
 import tensorflow as tf
+import io
 
 reducer = umap.UMAP(metric='cosine', random_state=42)
 
