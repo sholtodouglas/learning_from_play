@@ -29,20 +29,20 @@ def load_weights(path, actor, encoder=None, planner=None, step=""):
     if planner is not None: planner.load_weights(f'{path}/planner' + step + '.h5')
     if encoder is not None: encoder.load_weights(f'{path}/encoder' + step + '.h5')
 
-def load_optimizer_state(optimizer, load_path, strategy):
+def load_optimizer_state(optimizer, load_path, strategy,trainable_variables):
     def optimizer_step():
         # need to do this to initialize the optimiser
-        model_train_vars = actor.trainable_variables + encoder.trainable_variables + planner.trainable_variables
+
         # dummy zero gradients
-        zero_grads = [tf.zeros_like(w) for w in model_train_vars]
+        zero_grads = [tf.zeros_like(w) for w in trainable_variables]
         # save current state of variables
-        saved_vars = [tf.identity(w) for w in model_train_vars]
+        saved_vars = [tf.identity(w) for w in trainable_variables]
 
         # Apply gradients which don't do anything
-        optimizer.apply_gradients(zip(zero_grads, model_train_vars))
+        optimizer.apply_gradients(zip(zero_grads, trainable_variables))
 
         # Reload variables
-        [x.assign(y) for x, y in zip(model_train_vars, saved_vars)]
+        [x.assign(y) for x, y in zip(trainable_variables, saved_vars)]
         return 0.0
 
     @tf.function
