@@ -1,0 +1,3 @@
+[submodule "pandaRL"]
+	path = pandaRL
+	url = https://github.com/sholtodouglas/pandaRL.git

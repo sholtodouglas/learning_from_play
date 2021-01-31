@@ -1,0 +1,15 @@
+{
+    "colab":true,
+    "data_source":"GCS",
+    "from_tfrecords":true,
+    "device":"TPU", 
+    "train_datasets":["UR5", "UR5_slow_gripper","UR5_high_transition"],
+    "test_datasets":["UR5_slow_gripper_test"],
+    "batch_size":512,
+    "layer_size":2048,
+    "latent_dim":256,
+    "gcbc":false,
+    "num_distribs":null,
+    "qbits":null,
+    "learning_rate":3e-4
+}

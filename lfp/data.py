@@ -10,7 +10,6 @@ from tqdm import tqdm
 pp = pprint.PrettyPrinter(indent=4)
 
 
-
 def get_tf_records(PATHS, bucket_name):
     record_paths = []
     folder_names = ["data/"+str(p) for p in PATHS]
