@@ -11,6 +11,7 @@ from tensorflow_addons.optimizers import AdamW
 import lfp
 import os
 import wandb
+import json
 
 class BetaScheduler():
     def __init__(self, schedule='constant', beta=0.0, beta_max=1.0, max_steps=1e4,
@@ -75,10 +76,10 @@ class LFPTrainer():
         self.encoder = encoder
         self.planner = planner
         self.distribute_strategy = distribute_strategy
+        self.probabilistic = probabilistic
         self.gcbc = gcbc
         self.window_size = dataloader.window_size
         self.quaternion_act = dataloader.quaternion_act
-        self.probabilistic = dataloader.probabilistic
         self.batch_size = dataloader.batch_size
 
         self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
@@ -91,9 +92,9 @@ class LFPTrainer():
         self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
         self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
         self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
-        self.metrics['valid_max_position_loss'] = lfp.metrics.MaxMetric(name='valid_max_position_loss')
+        self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
         self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
-        self.metrics['valid_max_rotation_loss'] = lfp.metrics.MaxMetric(name='valid_max_rotation_loss')
+        self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
         self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_gripper_loss')
         if not self.gcbc:
             self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='train_reg_loss')
@@ -137,7 +138,7 @@ class LFPTrainer():
                 distrib = self.actor([states, goals])
                 loss = self.compute_loss(actions, distrib, mask, seq_lens)
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
-                self.optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
+                self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
         else:
             with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
                 encoding = self.encoder([states, actions])
@@ -281,3 +282,75 @@ class LFPTrainer():
             per_replica_losses, ze, zp = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
             return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), \
                    ze.values[0], zp.values[0]
+
+    def save_weights(self, path, actor, config, step=""):
+        os.makedirs(path, exist_ok=True)
+
+        # Save the config as json
+        print('Saving training config...')
+        with open(path, 'w') as f:
+            json.dump(dict(config), f)
+
+        # save timestepped version
+        print('Saving model weights...')
+        if step != "":
+            actor.save_weights(f'{path}/actor_{str(step)}.h5')
+            if not self.gcbc:
+                self.encoder.save_weights(f'{path}/encoder_{str(step)}.h5')
+                self.planner.save_weights(f'{path}/planner_{str(step)}.h5')
+
+        # save the latest version
+        actor.save_weights(f'{path}/actor.h5')
+        if not self.gcbc:
+            self.encoder.save_weights(f'{path}/encoder.h5')
+            self.planner.save_weights(f'{path}/planner.h5')
+
+        # save the optimizer state
+        np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights())
+        if not self.gcbc:
+            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
+            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights())
+
+    def load_weights(self, path, with_optimizer=False, step=""):
+        self.actor.load_weights(f'{path}/actor_{str(step)}.h5')
+        if not self.gcbc:
+            self.encoder.load_weights(f'{path}/encoder_{str(step)}.h5')
+            self.planner.load_weights(f'{path}/planner_{str(step)}.h5')
+            
+        if with_optimizer:
+            self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy')
+            if not self.gcbc:
+                self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy')
+                self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy')
+
+    @staticmethod
+    def load_optimizer_state(optimizer, load_path, strategy, trainable_variables):
+        def optimizer_step():
+            # need to do this to initialize the optimiser
+            # dummy zero gradients
+            zero_grads = [tf.zeros_like(w) for w in trainable_variables]
+            # save current state of variables
+            saved_vars = [tf.identity(w) for w in trainable_variables]
+
+            # Apply gradients which don't do anything
+            optimizer.apply_gradients(zip(zero_grads, trainable_variables))
+
+            # Reload variables
+            [x.assign(y) for x, y in zip(trainable_variables, saved_vars)]
+            return 0.0
+
+        @tf.function
+        def distributed_opt_step():
+            '''
+            Only used for optimizer checkpointing - we need to run a pass to initialise all the optimizer weights. Can't use restore as colab TPUs don't have a local filesystem.
+            '''
+            per_replica_losses = strategy.run(optimizer_step, args=())
+            return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+
+        # Load optimizer weights
+        opt_weights = np.load(load_path, allow_pickle=True)
+
+        # init the optimiser
+        distributed_opt_step()
+        # Set the weights of the optimizer
+        optimizer.set_weights(opt_weights)
