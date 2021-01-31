@@ -163,7 +163,7 @@ class LFPTrainer():
                 actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
                 planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
-                all_gradients = tf.concat([actor_gradients, encoder_gradients, planner_gradients])
+                all_gradients = actor_gradients + encoder_gradients + planner_gradients # concat lists
 
                 # Gradient norms
                 actor_norm = tf.linalg.global_norm(actor_gradients)
