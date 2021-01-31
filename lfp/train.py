@@ -6,6 +6,7 @@ from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.metrics import Accuracy
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.utils import Progbar
+from tensorflow.distribute import ReduceOp
 import tensorflow_addons as tfa
 from tensorflow_addons.optimizers import AdamW
 import lfp
@@ -269,19 +270,23 @@ class LFPTrainer():
 
     @tf.function
     def distributed_train_step(self, dataset_inputs, beta):
-        per_replica_losses = self.distribute_strategy.run(self.train_step,
-                                                          args=(dataset_inputs, beta))
-        return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+        per_replica_losses = self.distribute_strategy.run(self.train_step, args=(dataset_inputs, beta))
+        losses = self.distribute_strategy.reduce(ReduceOp.MEAN, per_replica_losses, axis=None)
+        return losses
 
     @tf.function
     def distributed_test_step(self, dataset_inputs, beta):
         if self.gcbc:
-            per_replica_losses = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+            per_replica_losses, metrics = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
+            losses = self.distribute_strategy.reduce(ReduceOp.MEAN, per_replica_losses, axis=None)
+            metrics = {k: self.distribute_strategy.reduce(ReduceOp.MEAN, v, axis=None) for k, v in metrics.items()}
+            return losses, metrics
         else:
-            per_replica_losses, ze, zp = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), \
-                   ze.values[0], zp.values[0]
+            per_replica_losses, metrics, ze, zp = self.distribute_strategy.run(self.test_step,
+                                                                               args=(dataset_inputs, beta))
+            losses = self.distribute_strategy.reduce(ReduceOp.MEAN, per_replica_losses, axis=None)
+            metrics = {k: self.distribute_strategy.reduce(ReduceOp.MEAN, v, axis=None) for k, v in metrics.items()}
+            return losses, metrics, ze.values[0], zp.values[0]
 
     def save_weights(self, path, config=None, step=""):
         os.makedirs(path, exist_ok=True)
@@ -289,8 +294,8 @@ class LFPTrainer():
         # Save the config as json
         if config is not None:
             print('Saving training config...')
-            with open(path, 'w') as f:
-                json.dump(dict(config), f)
+            with open(f'{path}/config.json', 'w') as f:
+                json.dump(vars(config), f)
 
         # save timestepped version
         print('Saving model weights...')
@@ -307,10 +312,10 @@ class LFPTrainer():
             self.planner.save_weights(f'{path}/planner.h5')
 
         # save the optimizer state
-        np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights())
+        np.save(f'{path}/actor_optimizer.npy', self.actor_optimizer.get_weights())
         if not self.gcbc:
-            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
-            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights())
+            np.save(f'{path}/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
+            np.save(f'{path}/planner_optimizer.npy', self.planner_optimizer.get_weights())
 
     def load_weights(self, path, with_optimizer=False, step=""):
         self.actor.load_weights(f'{path}/actor_{str(step)}.h5')
