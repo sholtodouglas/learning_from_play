@@ -193,14 +193,14 @@ class LFPTrainer():
                 self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
                 # Train Metrics
-                self.train_reg_loss.update_state(reg_loss)
-                self.train_act_with_enc_loss.update_state(act_enc_loss)
-                self.train_act_with_plan_loss.update_state(act_plan_loss)
+                self.metrics['train_reg_loss'].update_state(reg_loss)
+                self.metrics['train_act_with_enc_loss'].update_state(act_enc_loss)
+                self.metrics['train_act_with_plan_loss'].update_state(act_plan_loss)
 
-                self.actor_grad_norm.update_state(actor_norm)
-                self.encoder_grad_norm.update_state(encoder_norm)
-                self.planner_grad_norm.update_state(planner_norm)
-        self.train_loss.update_state(loss)
+                self.metrics['actor_grad_norm'].update_state(actor_norm)
+                self.metrics['encoder_grad_norm'].update_state(encoder_norm)
+                self.metrics['planner_grad_norm'].update_state(planner_norm)
+        self.metrics['train_loss'].update_state(loss)
 
         return loss
 
@@ -248,15 +248,15 @@ class LFPTrainer():
         true_pos_acts, true_rot_acts, true_grip_act = tf.split(actions, action_breakdown, -1)
 
         # Validation Metrics
-        self.valid_reg_loss.update_state(reg_loss)
-        self.valid_act_with_enc_loss.update_state(act_enc_loss)
-        self.valid_act_with_plan_loss.update_state(act_plan_loss)
-        self.valid_position_loss.update_state(self.compute_MAE(true_pos_acts, pos_acts, mask, seq_lens))
-        self.valid_max_position_loss(true_pos_acts, pos_acts, mask)
-        self.valid_rotation_loss.update_state(self.compute_MAE(true_rot_acts, rot_acts, mask, seq_lens))
-        self.valid_max_rotation_loss(true_rot_acts, rot_acts, mask)
-        self.valid_gripper_loss.update_state(self.compute_MAE(true_grip_act, grip_act, mask, seq_lens))
-        self.valid_loss.update_state(loss)
+        self.metrics['valid_reg_loss'].update_state(reg_loss)
+        self.metrics['valid_act_with_enc_loss'].update_state(act_enc_loss)
+        self.metrics['valid_act_with_plan_loss'].update_state(act_plan_loss)
+        self.metrics['valid_position_loss'].update_state(self.compute_MAE(true_pos_acts, pos_acts, mask, seq_lens))
+        self.metrics['valid_max_position_loss'](true_pos_acts, pos_acts, mask)
+        self.metrics['valid_rotation_loss'].update_state(self.compute_MAE(true_rot_acts, rot_acts, mask, seq_lens))
+        self.metrics['valid_max_rotation_loss'](true_rot_acts, rot_acts, mask)
+        self.metrics['valid_gripper_loss'].update_state(self.compute_MAE(true_grip_act, grip_act, mask, seq_lens))
+        self.metrics['valid_loss'].update_state(loss)
 
         # Results + clear state for all metrics in metrics dict
         metric_results = {metric_name: lfp.metric.log(metric) for metric_name, metric in self.metrics.items()}
