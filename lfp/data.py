@@ -10,13 +10,6 @@ from tqdm import tqdm
 pp = pprint.PrettyPrinter(indent=4)
 
 
-def get_tf_records(PATHS, bucket_name):
-    record_paths = []
-    folder_names = ["data/"+str(p) for p in PATHS]
-    for p in folder_names: # pass a list of folders and it will find the tf records in them
-        record_paths += tf.io.gfile.glob(f"gs://{bucket_name}/{p}/tf_records/*")
-    return record_paths
-
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_image(image_data):
     image = tf.image.decode_jpeg(image_data, channels=3)
@@ -42,17 +35,17 @@ def read_tfrecord(example):
     }
     data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
     
-    obs = tf.io.parse_tensor(data['obs'], tf.float32) 
-    acts = tf.io.parse_tensor(data['acts'], tf.float32) 
-    achieved_goals = tf.io.parse_tensor(data['achieved_goals'], tf.float32)  
-    joint_poses = tf.io.parse_tensor(data['joint_poses'], tf.float32)  
-    target_poses = tf.io.parse_tensor(data['target_poses'], tf.float32) 
-    acts_quat =tf.io.parse_tensor( data['acts_quat'], tf.float32) 
-    acts_rpy_rel = tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32)  
-    velocities = tf.io.parse_tensor(data['velocities'], tf.float32) 
-    obs_quat = tf.io.parse_tensor(data['obs_quat'], tf.float32) 
-    proprioception = tf.io.parse_tensor(data['proprioception'], tf.float32)  
-    sequence_index = tf.cast(data['sequence_index'], tf.int32) 
+    obs = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (18,))
+    acts = tf.ensure_shape(tf.io.parse_tensor(data['acts'], tf.float32), (7,))
+    achieved_goals = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (11,))
+    joint_poses = tf.ensure_shape(tf.io.parse_tensor(data['joint_poses'], tf.float32), (8,))
+    target_poses = tf.ensure_shape(tf.io.parse_tensor(data['target_poses'], tf.float32), (6,))
+    acts_quat = tf.ensure_shape(tf.io.parse_tensor( data['acts_quat'], tf.float32), (8,))
+    acts_rpy_rel = tf.ensure_shape(tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32), (7,))
+    velocities = tf.ensure_shape(tf.io.parse_tensor(data['velocities'], tf.float32), (6,))
+    obs_quat = tf.ensure_shape(tf.io.parse_tensor(data['obs_quat'], tf.float32), (19,))
+    proprioception = tf.ensure_shape(tf.io.parse_tensor(data['proprioception'], tf.float32), (1,))
+    sequence_index = tf.cast(data['sequence_index'], tf.int32)
     sequence_id = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
     
     img = decode_image(data['img'])
@@ -185,12 +178,9 @@ class PlayDataloader():
         :return:
         """
         if from_tfrecords:
-            if '.tfrecords' in paths[0]: 
-                record_paths = paths # we've already got the paths because we are direct GCS streaming
-            else:
-                record_paths = []
-                for p in paths:
-                    record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
+            record_paths = []
+            for p in paths:
+                record_paths += glob.glob(str(p/'tf_records/*.tfrecords'))
             dataset = extract_tfrecords(record_paths, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
@@ -255,12 +245,13 @@ class PlayDataloader():
             seq_len = self.window_size
             goals = self.create_goal_tensor(dataset, seq_len)
           
-        # Key data dimensions
-        self.obs_dim = obs.shape[1]
-        self.goal_dim = goals.shape[1]
-        self.act_dim = acts.shape[1]
+        # # Key data dimensions
+        # self.obs_dim = obs.shape[1]
+        # self.goal_dim = goals.shape[1]
+        # self.act_dim = acts.shape[1]
         
         # Preprocessing
+        # TODO: make this static normalization by some constant
         if self.normalize:
             # Record the mean like we used to @Tristan
             sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
@@ -276,14 +267,13 @@ class PlayDataloader():
                 'tstep_idxs':dataset['sequence_index']}
     
     # TODO: why did we not need this before?? window_lambda is being weird
-    @tf.autograph.experimental.do_not_convert
+    # @tf.autograph.experimental.do_not_convert
     def load(self, dataset):
         """
 
         :param dataset: a tf Dataset
         :return:
         """
-            
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
         seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
         dataset = dataset\
@@ -295,7 +285,7 @@ class PlayDataloader():
                 .map(self.transform, num_parallel_calls=self.num_workers)\
                 .batch(self.batch_size, drop_remainder=True)\
                 .prefetch(self.prefetch_size)
-        
+
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
