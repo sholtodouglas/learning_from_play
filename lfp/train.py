@@ -69,18 +69,21 @@ class LFPTrainer():
     mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
     kl_loss = tf.keras.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
 
-    def __init__(self, actor, window_size, quaternion_act, probabilistic, batch_size,
-                 encoder=None, planner=None, distribute_strategy=None, learning_rate='1e-4', gcbc=False):
+    def __init__(self, dataloader, actor, encoder=None, planner=None,
+                 distribute_strategy=None, learning_rate='3e-4', plan_lr_multiplier=10, clipnorm=1.0, gcbc=False):
         self.actor = actor
         self.encoder = encoder
         self.planner = planner
         self.distribute_strategy = distribute_strategy
-        self.optimizer = Adam(learning_rate)
         self.gcbc = gcbc
-        self.window_size = window_size
-        self.quaternion_act = quaternion_act
-        self.probabilistic = probabilistic
-        self.batch_size = batch_size
+        self.window_size = dataloader.window_size
+        self.quaternion_act = dataloader.quaternion_act
+        self.probabilistic = dataloader.probabilistic
+        self.batch_size = dataloader.batch_size
+
+        self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+        self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+        self.planner_optimizer = Adam(learning_rate=plan_lr_multiplier*learning_rate, global_clipnorm=clipnorm)
 
         # Metrics
         self.metrics = {}
