@@ -7,6 +7,7 @@ from tensorflow.keras.metrics import Accuracy
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.utils import Progbar
 from tensorflow.distribute import ReduceOp
+import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 from tensorflow_addons.optimizers import AdamW
 import lfp
@@ -69,7 +70,6 @@ class LFPTrainer():
     nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
     mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
     mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-    kl_loss = tf.keras.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
 
     def __init__(self, dataloader, actor, probabilistic, encoder=None, planner=None,
                  distribute_strategy=None, learning_rate='3e-4', plan_lr_multiplier=10, clipnorm=1.0, gcbc=False):
@@ -125,7 +125,7 @@ class LFPTrainer():
 
     def compute_regularisation_loss(self, plan, encoding):
         # Reverse KL(enc|plan): we want planner to map to encoder (weighted by encoder)
-        reg_loss = self.kl_loss(encoding, plan)
+        reg_loss = tfp.distributions.kl_divergence(encoding, plan)
         return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.batch_size)
 
 
