@@ -69,7 +69,7 @@ class LFPTrainer():
     mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
     kl_loss = tf.keras.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
 
-    def __init__(self, dataloader, actor, encoder=None, planner=None,
+    def __init__(self, dataloader, actor, probabilistic, encoder=None, planner=None,
                  distribute_strategy=None, learning_rate='3e-4', plan_lr_multiplier=10, clipnorm=1.0, gcbc=False):
         self.actor = actor
         self.encoder = encoder

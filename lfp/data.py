@@ -118,7 +118,7 @@ class PlayDataloader():
                 velocity=False,
                 normalize=False,
                 proprioception=False,
-                batch_size=32, # 512*8 with the TPU
+                batch_size=32,
                 window_size=50,
                 min_window_size=20,
                 window_shift=1,
@@ -142,7 +142,7 @@ class PlayDataloader():
         self.shuffle_size = int(batch_size * (window_size / window_shift))
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
-        self.seed=seed
+        self.seed = seed
         self.mean_obs, self.std_obs, self.mean_acts, self.standard_acts = None, None, None,None
         # Todo redo the standardisation find original version here https://github.com/sholtodouglas/learning_from_play/blob/9f385c0c80f905da63b9954e192dac696559e163/languageXplay.ipynb
 
