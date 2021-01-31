@@ -10,6 +10,7 @@ import tensorflow_addons as tfa
 from tensorflow_addons.optimizers import AdamW
 import lfp
 import os
+import wandb
 
 class BetaScheduler():
     def __init__(self, schedule='constant', beta=0.0, beta_max=1.0, max_steps=1e4,
@@ -62,7 +63,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-    # Loss functions
+    # Losses
     nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
     mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
     mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
@@ -80,6 +81,26 @@ class LFPTrainer():
         self.quaternion_act = quaternion_act
         self.probabilistic = probabilistic
         self.batch_size = batch_size
+
+        # Metrics
+        self.metrics = {}
+        self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
+        self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
+        self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
+        self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
+        self.metrics['valid_max_position_loss'] = lfp.metrics.MaxMetric(name='valid_max_position_loss')
+        self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
+        self.metrics['valid_max_rotation_loss'] = lfp.metrics.MaxMetric(name='valid_max_rotation_loss')
+        self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_gripper_loss')
+        if not self.gcbc:
+            self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='train_reg_loss')
+            self.metrics['train_act_with_enc_loss'] = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
+            self.metrics['train_act_with_plan_loss'] = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
+            self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
+            self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
+            self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
+            self.metrics['valid_act_with_enc_loss'] = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
+            self.metrics['valid_act_with_plan_loss'] = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
 
     def compute_loss(self, labels, predictions, mask, seq_lens):
         if self.probabilistic:
@@ -104,17 +125,18 @@ class LFPTrainer():
 
 
     # Now outside strategy .scope
-    def train_step(self, inputs, beta, prev_global_grad_norm):
-        with tf.GradientTape() as tape:  # separate planner tape for INFO VAE
-            # Todo: figure out mask and seq_lens for new dataset
-            states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], \
-                                                     inputs['masks']
-            if self.gcbc:
+    def train_step(self, inputs, beta):
+        # Todo: figure out mask and seq_lens for new dataset
+        states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], \
+                                                 inputs['masks']
+        if self.gcbc:
+            with tf.GradientTape() as actor_tape:
                 distrib = self.actor([states, goals])
                 loss = self.compute_loss(actions, distrib, mask, seq_lens)
-                gradients = tape.gradient(loss, self.actor.trainable_variables)
+                gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
-            else:
+        else:
+            with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
                 encoding = self.encoder([states, actions])
                 plan = self.planner([states[:, 0, :], goals[:, 0, :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
                 z_enc = encoding.sample()
@@ -130,53 +152,51 @@ class LFPTrainer():
                 act_loss = act_enc_loss
 
                 reg_loss = self.compute_regularisation_loss(plan, encoding)
-                train_reg_loss.update_state(reg_loss)
-                train_act_with_enc_loss.update_state(act_enc_loss)
-                train_act_with_plan_loss.update_state(act_plan_loss)
 
                 loss = act_loss + reg_loss * beta
 
-                gradients = tape.gradient(loss, trainable_variables)
-                actor_norm = tf.linalg.global_norm(gradients[:actor_grad_len])
-                encoder_norm = tf.linalg.global_norm(gradients[actor_grad_len:actor_grad_len + encoder_grad_len])
-                planner_norm = tf.linalg.global_norm(
-                    gradients[
-                    actor_grad_len + encoder_grad_len:actor_grad_len + encoder_grad_len + planner_grad_len])
-                actor_grad_norm.update_state(actor_norm)
-                encoder_grad_norm.update_state(encoder_norm)
-                planner_grad_norm.update_state(planner_norm)
+                # Gradients
+                actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
+                encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
+                planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
+                all_gradients = tf.concat([actor_gradients, encoder_gradients, planner_gradients])
 
-                # scale planner gradients
+                # Gradient norms
+                actor_norm = tf.linalg.global_norm(actor_gradients)
+                encoder_norm = tf.linalg.global_norm(encoder_gradients)
+                planner_norm = tf.linalg.global_norm(planner_gradients)
+                # global_norm = tf.linalg.global_norm(all_gradients)
 
-                # if the gradient norm is more than 3x the previous one, clip it to the previous norm for stability
-                gradients = tf.cond(tf.linalg.global_norm(gradients) > 3 * prev_global_grad_norm,
-                                    lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0],
-                                    lambda: gradients)  # must get[0] as it returns new norm as [1]
+                # # scale gradients
+                # def clip_gradients(gradients, gradient_norm, prev_gradient_norm, max_blowup=3):
+                #     # if the gradient norm is more than 3x the previous one, clip it to the previous norm for stability
+                #     gradients = tf.cond(gradient_norm > max_blowup * prev_gradient_norm,
+                #                         lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0],
+                #                         lambda: gradients)  # must get[0] as it returns new norm as [1]
+                #     return gradients
+
                 # make the planner converge more quickly
-                planner_grads = gradients[
-                                actor_grad_len + encoder_grad_len:actor_grad_len + encoder_grad_len + planner_grad_len]
+                # actor_gradients = clip_gradients(actor_gradients, )
 
-                planner_grads = [g * 10 for g in planner_grads]
-                gradients = gradients[:actor_grad_len] + gradients[
-                                                         actor_grad_len:actor_grad_len + encoder_grad_len] + planner_grads
 
-                actor_norm_clipped = tf.linalg.global_norm(gradients[:actor_grad_len])
-                encoder_norm_clipped = tf.linalg.global_norm(
-                    gradients[actor_grad_len:actor_grad_len + encoder_grad_len])
-                planner_norm_clipped = tf.linalg.global_norm(
-                    gradients[
-                    actor_grad_len + encoder_grad_len:actor_grad_len + encoder_grad_len + planner_grad_len])
-                actor_grad_norm_clipped.update_state(actor_norm_clipped)
-                encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
-                planner_grad_norm_clipped.update_state(planner_norm_clipped)
+                # actor_grad_norm_clipped.update_state(actor_norm_clipped)
+                # encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
+                # planner_grad_norm_clipped.update_state(planner_norm_clipped)
 
-                global_grad_norm.update_state(tf.linalg.global_norm(gradients))
+                # Optimizer step
+                self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
+                self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
+                self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
-                self.optimizer.apply_gradients(zip(gradients,
-                                              self.actor.trainable_variables + \
-                                              self.encoder.trainable_variables + \
-                                              self.planner.trainable_variables))
-        train_loss.update_state(loss)
+                # Train Metrics
+                self.train_reg_loss.update_state(reg_loss)
+                self.train_act_with_enc_loss.update_state(act_enc_loss)
+                self.train_act_with_plan_loss.update_state(act_plan_loss)
+
+                self.actor_grad_norm.update_state(actor_norm)
+                self.encoder_grad_norm.update_state(encoder_norm)
+                self.planner_grad_norm.update_state(planner_norm)
+        self.train_loss.update_state(loss)
 
         return loss
 
@@ -212,10 +232,6 @@ class LFPTrainer():
             act_loss = act_plan_loss
 
             reg_loss = self.compute_regularisation_loss(plan, encoding)
-            valid_reg_loss.update_state(reg_loss)
-
-            valid_act_with_enc_loss.update_state(act_enc_loss)
-            valid_act_with_plan_loss.update_state(act_plan_loss)
 
             # pos, rot, gripper individual losses
             if self.probabilistic:
@@ -226,31 +242,39 @@ class LFPTrainer():
             loss = act_loss + reg_loss * beta
 
         true_pos_acts, true_rot_acts, true_grip_act = tf.split(actions, action_breakdown, -1)
-        valid_position_loss.update_state(compute_MAE(true_pos_acts, pos_acts, mask, seq_lens))
-        valid_max_position_loss(true_pos_acts, pos_acts, mask)
-        valid_rotation_loss.update_state(compute_MAE(true_rot_acts, rot_acts, mask, seq_lens))
-        valid_max_rotation_loss(true_rot_acts, rot_acts, mask)
-        valid_gripper_loss.update_state(compute_MAE(true_grip_act, grip_act, mask, seq_lens))
-        valid_loss.update_state(loss)
+
+        # Validation Metrics
+        self.valid_reg_loss.update_state(reg_loss)
+        self.valid_act_with_enc_loss.update_state(act_enc_loss)
+        self.valid_act_with_plan_loss.update_state(act_plan_loss)
+        self.valid_position_loss.update_state(self.compute_MAE(true_pos_acts, pos_acts, mask, seq_lens))
+        self.valid_max_position_loss(true_pos_acts, pos_acts, mask)
+        self.valid_rotation_loss.update_state(self.compute_MAE(true_rot_acts, rot_acts, mask, seq_lens))
+        self.valid_max_rotation_loss(true_rot_acts, rot_acts, mask)
+        self.valid_gripper_loss.update_state(self.compute_MAE(true_grip_act, grip_act, mask, seq_lens))
+        self.valid_loss.update_state(loss)
+
+        # Results + clear state for all metrics in metrics dict
+        metric_results = {metric_name: lfp.metric.log(metric) for metric_name, metric in self.metrics.items()}
+        metric_results['beta'] = beta
 
         if self.gcbc:
-            return loss
+            return loss, metric_results
         else:
-            return loss, z_enc, z_plan
+            return loss, metric_results, z_enc, z_plan
 
     @tf.function
-    def distributed_train_step(self, dataset_inputs, beta, prev_global_grad_norm):
-        per_replica_losses = strategy.run(self.train_step, args=(dataset_inputs, beta, prev_global_grad_norm))
-        return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+    def distributed_train_step(self, dataset_inputs, beta):
+        per_replica_losses = self.distribute_strategy.run(self.train_step,
+                                                          args=(dataset_inputs, beta))
+        return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
     @tf.function
     def distributed_test_step(self, dataset_inputs, beta):
         if self.gcbc:
-            per_replica_losses = strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+            per_replica_losses = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
+            return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
         else:
-            per_replica_losses, ze, zp = strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), ze.values[0], zp.values[
-                0]
-
-
+            per_replica_losses, ze, zp = self.distribute_strategy.run(self.test_step, args=(dataset_inputs, beta))
+            return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), \
+                   ze.values[0], zp.values[0]
