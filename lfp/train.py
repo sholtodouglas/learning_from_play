@@ -283,24 +283,25 @@ class LFPTrainer():
             return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), \
                    ze.values[0], zp.values[0]
 
-    def save_weights(self, path, actor, config, step=""):
+    def save_weights(self, path, config=None, step=""):
         os.makedirs(path, exist_ok=True)
 
         # Save the config as json
-        print('Saving training config...')
-        with open(path, 'w') as f:
-            json.dump(dict(config), f)
+        if config is not None:
+            print('Saving training config...')
+            with open(path, 'w') as f:
+                json.dump(dict(config), f)
 
         # save timestepped version
         print('Saving model weights...')
         if step != "":
-            actor.save_weights(f'{path}/actor_{str(step)}.h5')
+            self.actor.save_weights(f'{path}/actor_{str(step)}.h5')
             if not self.gcbc:
                 self.encoder.save_weights(f'{path}/encoder_{str(step)}.h5')
                 self.planner.save_weights(f'{path}/planner_{str(step)}.h5')
 
         # save the latest version
-        actor.save_weights(f'{path}/actor.h5')
+        self.actor.save_weights(f'{path}/actor.h5')
         if not self.gcbc:
             self.encoder.save_weights(f'{path}/encoder.h5')
             self.planner.save_weights(f'{path}/planner.h5')
