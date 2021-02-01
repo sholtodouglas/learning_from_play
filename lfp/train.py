@@ -288,22 +288,24 @@ class LFPTrainer():
             metrics = {k: self.distribute_strategy.reduce(ReduceOp.MEAN, v, axis=None) for k, v in metrics.items()}
             return losses, metrics, ze.values[0], zp.values[0]
 
-    def save_weights(self, path, config=None, step=""):
+    def save_weights(self, path, config=None, run_id=None, step=""):
         os.makedirs(path, exist_ok=True)
 
         # Save the config as json
         if config is not None:
             print('Saving training config...')
             with open(f'{path}/config.json', 'w') as f:
-                json.dump(vars(config), f)
+                d = vars(config)
+                d['run_id'] = run_id
+                json.dump(d, f)
 
-        # save timestepped version
-        print('Saving model weights...')
-        if step != "":
-            self.actor.save_weights(f'{path}/actor_{str(step)}.h5')
-            if not self.gcbc:
-                self.encoder.save_weights(f'{path}/encoder_{str(step)}.h5')
-                self.planner.save_weights(f'{path}/planner_{str(step)}.h5')
+        # save timestepped version might be better to save timestepped versions within subfolders?
+        # print('Saving model weights...')
+        # if step != "":
+        #     self.actor.save_weights(f'{path}/actor_{str(step)}.h5')
+        #     if not self.gcbc:
+        #         self.encoder.save_weights(f'{path}/encoder_{str(step)}.h5')
+        #         self.planner.save_weights(f'{path}/planner_{str(step)}.h5')
 
         # save the latest version
         self.actor.save_weights(f'{path}/actor.h5')
@@ -311,26 +313,28 @@ class LFPTrainer():
             self.encoder.save_weights(f'{path}/encoder.h5')
             self.planner.save_weights(f'{path}/planner.h5')
 
+        os.makedirs(path+'/optimizers', exist_ok=True)
         # save the optimizer state
-        np.save(f'{path}/actor_optimizer.npy', self.actor_optimizer.get_weights())
+        np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights())
         if not self.gcbc:
-            np.save(f'{path}/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
-            np.save(f'{path}/planner_optimizer.npy', self.planner_optimizer.get_weights())
+            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
+            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights())
 
     def load_weights(self, path, with_optimizer=False, step=""):
-        self.actor.load_weights(f'{path}/actor_{str(step)}.h5')
+        # IMO better to load timestepped version from subfolders - Todo
+        self.actor.load_weights(f'{path}/actor.h5')
         if not self.gcbc:
-            self.encoder.load_weights(f'{path}/encoder_{str(step)}.h5')
-            self.planner.load_weights(f'{path}/planner_{str(step)}.h5')
+            self.encoder.load_weights(f'{path}/encoder.h5')
+            self.planner.load_weights(f'{path}/planner.h5')
             
         if with_optimizer:
-            self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy')
+            self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
             if not self.gcbc:
-                self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy')
-                self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy')
+                self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy', self.encoder.trainable_variables)
+                self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy', self.planner.trainable_variables)
 
-    @staticmethod
-    def load_optimizer_state(optimizer, load_path, strategy, trainable_variables):
+
+    def load_optimizer_state(self, optimizer, load_path, trainable_variables):
         def optimizer_step():
             # need to do this to initialize the optimiser
             # dummy zero gradients
@@ -350,8 +354,8 @@ class LFPTrainer():
             '''
             Only used for optimizer checkpointing - we need to run a pass to initialise all the optimizer weights. Can't use restore as colab TPUs don't have a local filesystem.
             '''
-            per_replica_losses = strategy.run(optimizer_step, args=())
-            return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+            per_replica_losses = self.distribute_strategy.run(optimizer_step, args=())
+            return self.distribute_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
         # Load optimizer weights
         opt_weights = np.load(load_path, allow_pickle=True)
