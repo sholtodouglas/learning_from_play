@@ -163,10 +163,11 @@ class PlayDataloader():
                                 data=[acts],
                                 name="act_limit_validation")
         
-    def extract(self, paths, from_tfrecords=False):
+    def extract(self, paths, include_imgs=False, from_tfrecords=False):
         """
 
         :param paths:
+        :param include_imgs:
         :param from_tfrecords:
         :return:
         """
@@ -174,7 +175,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, ordered=True, num_workers=self.num_workers)
+            dataset = extract_tfrecords(record_paths, include_imgs, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
