@@ -17,52 +17,45 @@ def decode_image(image_data):
     image = tf.reshape(image, [200,200, 3]) # explicit size needed for TPU
     return image
 
-def read_tfrecord(example):
-    LABELED_TFREC_FORMAT = {
-            'obs': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'acts': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'achieved_goals': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'joint_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'target_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'acts_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'acts_rpy_rel': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'velocities': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'obs_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'proprioception': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'sequence_index': tf.io.FixedLenFeature([], tf.int64),
-            'sequence_id': tf.io.FixedLenFeature([], tf.int64),
-            'img': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-    }
-    data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
-    
-    obs = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (18,))
-    acts = tf.ensure_shape(tf.io.parse_tensor(data['acts'], tf.float32), (7,))
-    achieved_goals = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (11,))
-    joint_poses = tf.ensure_shape(tf.io.parse_tensor(data['joint_poses'], tf.float32), (8,))
-    target_poses = tf.ensure_shape(tf.io.parse_tensor(data['target_poses'], tf.float32), (6,))
-    acts_quat = tf.ensure_shape(tf.io.parse_tensor( data['acts_quat'], tf.float32), (8,))
-    acts_rpy_rel = tf.ensure_shape(tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32), (7,))
-    velocities = tf.ensure_shape(tf.io.parse_tensor(data['velocities'], tf.float32), (6,))
-    obs_quat = tf.ensure_shape(tf.io.parse_tensor(data['obs_quat'], tf.float32), (19,))
-    proprioception = tf.ensure_shape(tf.io.parse_tensor(data['proprioception'], tf.float32), (1,))
-    sequence_index = tf.cast(data['sequence_index'], tf.int32)
-    sequence_id = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
-    
-    img = decode_image(data['img'])
+def read_tfrecord(include_imgs=False):
+    def read_tfrecord_helper(example):
+        LABELED_TFREC_FORMAT = {
+                'obs': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'acts': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'achieved_goals': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'joint_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'target_poses': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'acts_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'acts_rpy_rel': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'velocities': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'obs_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'proprioception': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'sequence_index': tf.io.FixedLenFeature([], tf.int64),
+                'sequence_id': tf.io.FixedLenFeature([], tf.int64),
+        }
+        if include_imgs:
+            LABELED_TFREC_FORMAT['img'] = tf.io.FixedLenFeature([], tf.string) # tf.string means bytestring
 
-    return {'obs' : obs, 
-            'acts' : acts, 
-            'achieved_goals' : achieved_goals, 
-            'joint_poses' : joint_poses, 
-            'target_poses' : target_poses, 
-            'acts_quat' : acts_quat, 
-            'acts_rpy_rel' : acts_rpy_rel, 
-            'velocities' : velocities, 
-            'obs_quat' : obs_quat, 
-            'proprioception' : proprioception, 
-            'sequence_index' : sequence_index, 
-            'sequence_id' : sequence_id,
-            'img' : img}
+        data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+
+        output = {}
+        output['obs'] = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (18,))
+        output['acts'] = tf.ensure_shape(tf.io.parse_tensor(data['acts'], tf.float32), (7,))
+        output['achieved_goals'] = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (11,))
+        output['joint_poses'] = tf.ensure_shape(tf.io.parse_tensor(data['joint_poses'], tf.float32), (8,))
+        output['target_poses'] = tf.ensure_shape(tf.io.parse_tensor(data['target_poses'], tf.float32), (6,))
+        output['acts_quat'] = tf.ensure_shape(tf.io.parse_tensor( data['acts_quat'], tf.float32), (8,))
+        output['acts_rpy_rel'] = tf.ensure_shape(tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32), (7,))
+        output['velocities'] = tf.ensure_shape(tf.io.parse_tensor(data['velocities'], tf.float32), (6,))
+        output['obs_quat'] = tf.ensure_shape(tf.io.parse_tensor(data['obs_quat'], tf.float32), (19,))
+        output['proprioception'] = tf.ensure_shape(tf.io.parse_tensor(data['proprioception'], tf.float32), (1,))
+        output['sequence_index'] = tf.cast(data['sequence_index'], tf.int32)
+        output['sequence_id'] = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
+        if include_imgs:
+            output['img'] = decode_image(data['img'])
+
+        return output
+    return read_tfrecord_helper
 
 def extract_npz(paths):
     keys = ['obs', 'acts', 'achieved_goals', 'joint_poses', 'target_poses', 'acts_quat', 'acts_rpy_rel',
@@ -89,14 +82,14 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, ordered=True, num_workers=tf.data.experimental.AUTOTUNE):
+def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=tf.data.experimental.AUTOTUNE):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # disable order, increase speed
 
     dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_workers)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord, num_parallel_calls=num_workers)
+    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_workers)
     return dataset
 
 
