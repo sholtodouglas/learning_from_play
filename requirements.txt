@@ -137,3 +137,4 @@ wincertstore==0.2
 wmi==1.5.1
 xmltodict==0.12.0
 zipp==3.4.0
+pathy==0.3.4

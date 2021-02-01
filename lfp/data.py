@@ -123,7 +123,7 @@ class PlayDataloader():
                 min_window_size=20,
                 window_shift=1,
                 variable_seqs=True, 
-                num_workers=tf.data.experimental.AUTOTUNE,
+                num_workers=1,
                 seed=42):
         
         self.relative_obs = relative_obs
