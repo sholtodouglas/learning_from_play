@@ -82,14 +82,14 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=1):
+def extract_tfrecords(paths, include_imgs=False, ordered=True, num_parallel_reads=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # must be 1 to maintain order while streaming from GCS
 
-    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=1)
+    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_parallel_reads)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=1)
+    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_parallel_reads)
     return dataset
 
 
@@ -175,7 +175,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, include_imgs, ordered=True, num_workers=self.num_workers)
+            dataset = extract_tfrecords(record_paths, include_imgs, ordered=True, num_parallel_reads=1)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
