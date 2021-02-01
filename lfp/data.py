@@ -85,11 +85,11 @@ def extract_npz(paths):
 def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
-    tf_options.experimental_deterministic = ordered  # disable order, increase speed
+    tf_options.experimental_deterministic = ordered  # must be 1 to maintain order while streaming from GCS
 
-    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_workers)
+    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=1)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_workers)
+    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=1)
     return dataset
 
 
@@ -116,7 +116,7 @@ class PlayDataloader():
                 min_window_size=20,
                 window_shift=1,
                 variable_seqs=True, 
-                num_workers=1,
+                num_workers=tf.data.experimental.AUTOTUNE,
                 seed=42):
         
         self.relative_obs = relative_obs
