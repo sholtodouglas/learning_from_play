@@ -82,7 +82,7 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=tf.data.experimental.AUTOTUNE):
+def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # disable order, increase speed
