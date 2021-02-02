@@ -108,7 +108,6 @@ elif args.data_source == 'GCS':
     bucket_name = 'lfp_europe_west4_a'
     #     if region != 'Iowa':
     logging.warning(f'You are accessing GCS data from {region}, make sure this is the same as your bucket {bucket_name}')
-    auth.authenticate_user()
     STORAGE_PATH = Pathy(f'gs://{bucket_name}')
 else:
     print('Reading data from local filesystem')
