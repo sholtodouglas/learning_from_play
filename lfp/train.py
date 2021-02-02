@@ -83,9 +83,9 @@ class LFPTrainer():
         self.quaternion_act = dataloader.quaternion_act
         self.batch_size = dataloader.batch_size
 
-        self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        self.planner_optimizer = Adam(learning_rate=plan_lr_multiplier*learning_rate, global_clipnorm=clipnorm)
+        self.actor_optimizer = Adam(learning_rate=learning_rate)#, global_clipnorm=clipnorm)
+        self.encoder_optimizer = Adam(learning_rate=learning_rate)#, global_clipnorm=clipnorm)
+        self.planner_optimizer = Adam(learning_rate=learning_rate)#*plan_lr_multiplier, global_clipnorm=clipnorm)
 
         # Metrics
         self.metrics = {}
