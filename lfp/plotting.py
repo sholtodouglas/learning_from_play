@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np 
 import tensorflow as tf
 import io
+from io import BytesIO
+from tensorflow.python.lib.io import file_io
 
 reducer = umap.UMAP(metric='cosine', random_state=42)
 
@@ -71,7 +73,11 @@ bucket_colors = {
 hold_out = ['dial']
 
 def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
-    test_labels = np.load(TEST_DATA_PATH/'trajectory_labels.npz', allow_pickle=True)['trajectory_labels']
+    if "gs://" in str(TEST_DATA_PATH):
+      f  = BytesIO(file_io.read_file_to_string(TEST_DATA_PATHS[0]/'trajectory_labels.npz', binary_mode=True))
+      test_labels = np.load(f, allow_pickle=True)['trajectory_labels']
+    else:
+      test_labels = np.load(TEST_DATA_PATH/'trajectory_labels.npz', allow_pickle=True)['trajectory_labels']
     acts,obs, goals, labels, colors, paths = [], [], [], [], [], []
     # this could be sped up significantly by just storing the trajs in memory, it takes ms on my local, but is a bit slow with colabs cpu
     
