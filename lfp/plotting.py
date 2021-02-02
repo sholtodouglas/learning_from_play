@@ -68,16 +68,19 @@ bucket_colors = {
  'block + shelf': [0.05, 0.2, 0.7],
 }
 
-
-
 hold_out = ['dial']
 
-def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
-    if "gs://" in str(TEST_DATA_PATH):
-      f  = BytesIO(file_io.read_file_to_string(TEST_DATA_PATH/'trajectory_labels.npz', binary_mode=True))
-      test_labels = np.load(f, allow_pickle=True)['trajectory_labels']
+def load_GCS_safe(path):
+    if "gs://" in str(path):
+        f  = BytesIO(file_io.read_file_to_string(path, binary_mode=True))
+        return np.load(f, allow_pickle=True)
     else:
-      test_labels = np.load(TEST_DATA_PATH/'trajectory_labels.npz', allow_pickle=True)['trajectory_labels']
+        return np.load(path, allow_pickle=True)
+
+
+def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
+    test_labels = load_GCS_safe(TEST_DATA_PATH/'trajectory_labels.npz')['trajectory_labels']
+
     acts,obs, goals, labels, colors, paths = [], [], [], [], [], []
     # this could be sped up significantly by just storing the trajs in memory, it takes ms on my local, but is a bit slow with colabs cpu
     
@@ -92,7 +95,7 @@ def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
       if v not in hold_out:
         folder = k.split('states_and_ims/')[1].split('/')[0]
         start = int(k.split('env_states/')[1].split('/')[0].strip('.bullet'))
-        data = np.load(TEST_DATA_PATH/'obs_act_etc/'/folder/'data.npz')
+        data = load_GCS_safe(TEST_DATA_PATH/'obs_act_etc/'/folder/'data.npz')
         traj_len = 40
         end = start + traj_len #min(len(data['acts_rpy'])-1,start+traj_len )
         traj_acts = data['acts'][start:end]
