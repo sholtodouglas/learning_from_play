@@ -32,6 +32,7 @@ parser.add_argument('-r', '--resume', default=False, action='store_true')
 
 args = parser.parse_args()
 
+# python3 train_lfp.py \
 # tpuv3-test \
 # --train_dataset UR5 UR5_slow_gripper UR5_high_transition \
 # --test_dataset UR5_slow_gripper_test \
@@ -87,7 +88,7 @@ if args.colab:
     drive.mount('/content/drive')
 else:
     print('Using local setup')
-    WORKING_PATH = Path(__file__).absolute().parent
+    WORKING_PATH = Path(__file__).parent.parent
     print(f'Working path: {WORKING_PATH}')
 
 # Change working directory to learning_from_play
