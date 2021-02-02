@@ -118,8 +118,8 @@ def create_encoder(obs_dim, act_dim,
     # Layers #
     x = Concatenate(axis=-1)([obs, acts])
     x = Masking(mask_value=0.)(x)
-    x = Bidirectional(LSTM(layer_size // 4, return_sequences=True), merge_mode='concat')(x)
-    x = Bidirectional(LSTM(layer_size // 4, return_sequences=False), merge_mode='concat')(x)
+    x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
+    x = Bidirectional(LSTM(layer_size, return_sequences=False), merge_mode='concat')(x)
 
     # Latent Variable #
     mu = Dense(latent_dim, activation=None, name='mu')(x)
@@ -143,10 +143,10 @@ def create_planner(obs_dim, goal_dim,
     # Layers #
     x = Concatenate(axis=-1)([o_i, o_g])
     x = Masking(mask_value=0.)(x)
-    x = Dense(layer_size // 4, activation="relu", name='layer_1')(x)
-    x = Dense(layer_size // 4, activation="relu", name='layer_2')(x)
-    x = Dense(layer_size // 4, activation="relu", name='layer_3')(x)
-    x = Dense(layer_size // 4, activation="relu", name='layer_4')(x)
+    x = Dense(layer_size, activation="relu", name='layer_1')(x)
+    x = Dense(layer_size, activation="relu", name='layer_2')(x)
+    x = Dense(layer_size, activation="relu", name='layer_3')(x)
+    x = Dense(layer_size, activation="relu", name='layer_4')(x)
 
     # Latent Variable #
     mu = Dense(latent_dim, activation=None, name='mu')(x)
