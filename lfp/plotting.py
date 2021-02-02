@@ -74,7 +74,7 @@ hold_out = ['dial']
 
 def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
     if "gs://" in str(TEST_DATA_PATH):
-      f  = BytesIO(file_io.read_file_to_string(TEST_DATA_PATHS[0]/'trajectory_labels.npz', binary_mode=True))
+      f  = BytesIO(file_io.read_file_to_string(TEST_DATA_PATH/'trajectory_labels.npz', binary_mode=True))
       test_labels = np.load(f, allow_pickle=True)['trajectory_labels']
     else:
       test_labels = np.load(TEST_DATA_PATH/'trajectory_labels.npz', allow_pickle=True)['trajectory_labels']
