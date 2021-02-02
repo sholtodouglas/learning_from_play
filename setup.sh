@@ -2,4 +2,4 @@
 
 pip3 install -r requirements.txt
 
-export PYTHONPATH="$PYTHONPATH:."
+export PYTHONPATH="${PYTHONPATH}:/root/learning_from_play"

@@ -101,7 +101,6 @@ if args.data_source == 'DRIVE':
     print('Reading data from Google Drive')
     STORAGE_PATH = Path('/content/drive/My Drive/Robotic Learning')
 elif args.data_source == 'GCS':
-    assert args.colab, "Must be using Colab"
     print('Reading data from Google Cloud Storage')
     r = requests.get('https://ipinfo.io')
     region = r.json()['region']
