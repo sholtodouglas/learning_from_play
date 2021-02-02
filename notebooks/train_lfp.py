@@ -93,7 +93,7 @@ else:
 
 # Change working directory to learning_from_play
 os.chdir(WORKING_PATH)
-import lfp
+import .lfp
         
 # Set up storage directory and datasets
 if args.data_source == 'DRIVE':
