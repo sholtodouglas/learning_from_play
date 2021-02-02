@@ -88,7 +88,7 @@ if args.colab:
     drive.mount('/content/drive')
 else:
     print('Using local setup')
-    WORKING_PATH = Path(__file__).parent.parent
+    WORKING_PATH = Path().absolute().parent
     print(f'Working path: {WORKING_PATH}')
 
 # Change working directory to learning_from_play
