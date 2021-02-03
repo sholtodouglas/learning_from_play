@@ -29,6 +29,8 @@ parser.add_argument('-lr', '--learning_rate', type=float, default=3e-4)
 parser.add_argument('-t', '--train_steps', type=int, default=100000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 
+parser.add_argument('--gradient_clipnorm', type=float, default=1.0)
+
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name')
 
@@ -101,7 +103,7 @@ else:
 # Change working directory to learning_from_play
 os.chdir(WORKING_PATH)
 import lfp
-        
+
 # Set up storage directory and datasets
 if args.data_source == 'DRIVE':
     assert args.colab, "Must be using Colab"
@@ -112,7 +114,6 @@ elif args.data_source == 'GCS':
     r = requests.get('https://ipinfo.io')
     region = r.json()['region']
     project_id = 'learning-from-play-303306'
-    #     if region != 'Iowa':
     logging.warning(f'You are accessing GCS data from {region}, make sure this is the same as your bucket {args.bucket_name}')
     STORAGE_PATH = Pathy(f'gs://{args.bucket_name}')
 else:
@@ -222,7 +223,7 @@ def train_setup():
                                  probabilistic=args.num_distribs is not None,
                                  distribute_strategy=strategy,
                                  learning_rate=args.learning_rate,
-                                 clipnorm=1.0,
+                                 clipnorm=args.gradient_clipnorm,
                                  gcbc=args.gcbc)
     
     return trainer
