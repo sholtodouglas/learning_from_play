@@ -94,6 +94,8 @@ class LFPTrainer():
             self.encoder_grad_len = len(self.encoder.trainable_variables)
             self.planner_grad_len = len(self.planner.trainable_variables)
 
+        self.prev_global_grad_norm = np.float('inf')
+
         # Metrics
         self.metrics = {}
         self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
@@ -140,7 +142,7 @@ class LFPTrainer():
 
 
     # Now outside strategy .scope
-    def train_step(self, inputs, beta, prev_global_grad_norm):
+    def train_step(self, inputs, beta):
         # Todo: figure out mask and seq_lens for new dataset
         states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], \
                                                  inputs['masks']
@@ -190,7 +192,7 @@ class LFPTrainer():
                 # global_norm = tf.linalg.global_norm(all_gradients)
 
                 # if the gradient norm is more than 3x the previous one, clip it to the previous norm for stability
-                gradients = tf.cond(tf.linalg.global_norm(gradients) > 3*prev_global_grad_norm, lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0], lambda: gradients) #must get[0] as it returns new norm as [1]
+                gradients = tf.cond(tf.linalg.global_norm(gradients) > 3*self.prev_global_grad_norm, lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0], lambda: gradients) #must get[0] as it returns new norm as [1]
                 #gradients = tf.cond(sum_of_norms > 3*prev_global_grad_norm, lambda: [tf.clip_by_norm(g, prev_global_grad_norm) for g in gradients], lambda: gradients)
                 #test2.update_state(tf.linalg.global_norm(gradients))
                 #test.update_state(tf.linalg.global_norm(gradients[actor_grad_len+encoder_grad_len:actor_grad_len+encoder_grad_len+planner_grad_len]))
@@ -201,7 +203,7 @@ class LFPTrainer():
                 gradients = gradients[:self.actor_grad_len] + gradients[self.actor_grad_len:self.actor_grad_len+self.encoder_grad_len] + planner_grads
                 self.global_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables))
 
-
+                self.prev_global_grad_norm = tf.linalg.global_norm(gradients)
                 # actor_grad_norm_clipped.update_state(actor_norm_clipped)
                 # encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
                 # planner_grad_norm_clipped.update_state(planner_norm_clipped)
