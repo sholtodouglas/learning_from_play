@@ -205,7 +205,7 @@ class LFPTrainer():
                 gradients = gradients[:self.actor_grad_len] + gradients[self.actor_grad_len:self.actor_grad_len+self.encoder_grad_len] + planner_grads
                 self.global_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables))
 
-                self.metrics['global_grad_norm'] = tf.linalg.global_norm(gradients)
+                self.metrics['global_grad_norm'].update_state(tf.linalg.global_norm(gradients))
                 # actor_grad_norm_clipped.update_state(actor_norm_clipped)
                 # encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
                 # planner_grad_norm_clipped.update_state(planner_norm_clipped)
