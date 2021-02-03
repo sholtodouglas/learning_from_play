@@ -90,7 +90,7 @@ class LFPTrainer():
         self.global_optimizer = Adam(learning_rate=learning_rate)
 
         self.actor_grad_len  = len(self.actor.trainable_variables)
-        if not self.GCBC:
+        if not self.gcbc:
             self.encoder_grad_len = len(self.encoder.trainable_variables)
             self.planner_grad_len = len(self.planner.trainable_variables)
 
