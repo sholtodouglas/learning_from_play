@@ -83,9 +83,16 @@ class LFPTrainer():
         self.quaternion_act = dataloader.quaternion_act
         self.batch_size = dataloader.batch_size
 
-        self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        self.planner_optimizer = Adam(learning_rate=learning_rate*plan_lr_multiplier, global_clipnorm=clipnorm)
+        # self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+        # self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+        # self.planner_optimizer = Adam(learning_rate=learning_rate*plan_lr_multiplier, global_clipnorm=clipnorm)
+
+        self.global_optimizer = Adam(learning_rate=learning_rate)
+
+        self.actor_grad_len  = len(self.actor.trainable_variables)
+        if not GCBC:
+            self.encoder_grad_len = len(self.encoder.trainable_variables)
+            self.planner_grad_len = len(self.planner.trainable_variables)
 
         # Metrics
         self.metrics = {}
@@ -106,6 +113,9 @@ class LFPTrainer():
             self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
             self.metrics['valid_act_with_enc_loss'] = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
             self.metrics['valid_act_with_plan_loss'] = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
+
+
+        
 
     def compute_loss(self, labels, predictions, mask, seq_lens):
         if self.probabilistic:
@@ -141,7 +151,7 @@ class LFPTrainer():
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
         else:
-            with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
+            with tf.GradientTape() as tape:#, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
                 encoding = self.encoder([states, actions])
                 plan = self.planner([states[:, 0, :], goals[:, 0, :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
                 z_enc = encoding.sample()
@@ -160,16 +170,24 @@ class LFPTrainer():
 
                 loss = act_loss + reg_loss * beta
 
-                # Gradients
-                actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
-                encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
-                planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
-                all_gradients = actor_gradients + encoder_gradients + planner_gradients # concat lists
+                # # Gradients
+                # actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
+                # encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
+                # planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
+                # all_gradients = actor_gradients + encoder_gradients + planner_gradients # concat lists
 
-                # Gradient norms
-                actor_norm = tf.linalg.global_norm(actor_gradients)
-                encoder_norm = tf.linalg.global_norm(encoder_gradients)
-                planner_norm = tf.linalg.global_norm(planner_gradients)
+                # # Gradient norms
+                # actor_norm = tf.linalg.global_norm(actor_gradients)
+                # encoder_norm = tf.linalg.global_norm(encoder_gradients)
+                # planner_norm = tf.linalg.global_norm(planner_gradients)
+
+                gradients = tape.gradient(loss, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables)
+                actor_norm = tf.linalg.global_norm(gradients[:self.actor_grad_len])
+                encoder_norm = tf.linalg.global_norm(gradients[self.actor_grad_len:self.actor_grad_len+self.encoder_grad_len])
+                planner_norm = tf.linalg.global_norm(gradients[self.actor_grad_len+self.encoder_grad_len:self.actor_grad_len+self.encoder_grad_len+self.planner_grad_len])
+                self.global_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables))
+
+
                 # global_norm = tf.linalg.global_norm(all_gradients)
 
                 # # scale gradients
@@ -188,10 +206,10 @@ class LFPTrainer():
                 # encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
                 # planner_grad_norm_clipped.update_state(planner_norm_clipped)
 
-                # Optimizer step
-                self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
-                self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
-                self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
+                # # Optimizer step
+                # self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
+                # self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
+                # self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
                 # Train Metrics
                 self.metrics['train_reg_loss'].update_state(reg_loss)
@@ -314,11 +332,12 @@ class LFPTrainer():
             self.planner.save_weights(f'{path}/planner.h5')
 
         os.makedirs(path+'/optimizers', exist_ok=True)
+        np.save(f'{path}/optimizers/optimizer.npy', self.global_optimizer.get_weights())
         # save the optimizer state
-        np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights())
-        if not self.gcbc:
-            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
-            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights())
+        # np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights())
+        # if not self.gcbc:
+        #     np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights())
+        #     np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights())
 
     def load_weights(self, path, with_optimizer=False, step=""):
         # IMO better to load timestepped version from subfolders - Todo
@@ -328,10 +347,11 @@ class LFPTrainer():
             self.planner.load_weights(f'{path}/planner.h5')
             
         if with_optimizer:
-            self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
-            if not self.gcbc:
-                self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy', self.encoder.trainable_variables)
-                self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy', self.planner.trainable_variables)
+            #self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
+            self.load_optimizer_state(self.global_optimizer, f'{path}/optimizers/optimizer.npy', self.actor.trainable_variablesself.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables)
+            # if not self.gcbc:
+            #     self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy', self.encoder.trainable_variables)
+            #     self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy', self.planner.trainable_variables)
 
 
     def load_optimizer_state(self, optimizer, load_path, trainable_variables):
