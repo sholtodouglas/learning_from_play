@@ -135,10 +135,8 @@ def create_planner(obs_dim, goal_dim,
     batch_size = None
 
     # Input #
-    o_i = Input(shape=(obs_dim,), batch_size=batch_size, dtype=tf.float32,
-                name='initial_obs')  # has arm state
-    o_g = Input(shape=(goal_dim,), batch_size=batch_size, dtype=tf.float32,
-                name='goal_obs')  # does not have arm state
+    o_i = Input(shape=(obs_dim,), batch_size=batch_size, dtype=tf.float32, name='initial_obs')  # has arm state
+    o_g = Input(shape=(goal_dim,), batch_size=batch_size, dtype=tf.float32, name='goal_obs')  # does not have arm state
 
     # Layers #
     x = Concatenate(axis=-1)([o_i, o_g])
