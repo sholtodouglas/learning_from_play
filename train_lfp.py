@@ -310,7 +310,7 @@ while t < args.train_steps:
     if t % save_inc == 0:
         trainer.save_weights(model_path, args, wandb.run.id)
         if not args.gcbc:
-            z_enc, z_plan = lfp.plotting.produce_cluster_fig(next(plotting_dataset), trainer.encoder, trainer.planner, TEST_DATA_PATHS[0], num_take=dl.batch_size)
+            z_enc, z_plan = lfp.plotting.produce_cluster_fig(next(plotting_dataset), trainer.encoder, trainer.planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//NUM_DEVICES)
             convergence_plot = lfp.plotting.project_enc_and_plan(ze, zp)
             wandb.log({'z_enc':z_enc, 'z_plan':z_plan, 'convergence_plot':convergence_plot}, step=t)
     t += 1
