@@ -192,7 +192,7 @@ class LFPTrainer():
                 # global_norm = tf.linalg.global_norm(all_gradients)
 
                 # if the gradient norm is more than 3x the previous one, clip it to the previous norm for stability
-                gradients = tf.cond(tf.linalg.global_norm(gradients) > 3*self.prev_global_grad_norm, lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0], lambda: gradients) #must get[0] as it returns new norm as [1]
+                gradients = tf.cond(tf.linalg.global_norm(gradients) > 3*self.prev_global_grad_norm, lambda: tf.clip_by_global_norm(gradients, self.prev_global_grad_norm)[0], lambda: gradients) #must get[0] as it returns new norm as [1]
                 #gradients = tf.cond(sum_of_norms > 3*prev_global_grad_norm, lambda: [tf.clip_by_norm(g, prev_global_grad_norm) for g in gradients], lambda: gradients)
                 #test2.update_state(tf.linalg.global_norm(gradients))
                 #test.update_state(tf.linalg.global_norm(gradients[actor_grad_len+encoder_grad_len:actor_grad_len+encoder_grad_len+planner_grad_len]))
