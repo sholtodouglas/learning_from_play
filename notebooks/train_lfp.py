@@ -14,9 +14,9 @@ parser.add_argument('run_name')
 parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
 parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
-parser.add_argument('-s', '--data_source', default='LOCAL', help='Source of training data')
+parser.add_argument('-s', '--data_source', default='LOCAL', choices=['LOCAL', 'DRIVE', 'GCS'], help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
-parser.add_argument('-d', '--device', default='CPU', help='Hardware device to train on')
+parser.add_argument('-d', '--device', default='CPU', choices=['CPU', 'GPU', 'TPU'],  help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=32, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=256, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=256, type=int, help='Layer size of encoder, increases size of neural net')
@@ -29,8 +29,15 @@ parser.add_argument('-lr', '--learning_rate', type=float, default=3e-4)
 parser.add_argument('-t', '--train_steps', type=int, default=100000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 
+parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
+parser.add_argument('--tpu_name', help='GCP TPU name')
 
 args = parser.parse_args()
+
+# Argument validation
+if args.device == 'TPU' and args.data_source == 'GCS':
+    if args.bucket_name is None or args.tpu_name is None:
+        parser.error('When using GCP TPUs you must specify the bucket and TPU names')
 
 # python3 notebooks/train_lfp.py \
 # tpuv3-test \
@@ -105,10 +112,9 @@ elif args.data_source == 'GCS':
     r = requests.get('https://ipinfo.io')
     region = r.json()['region']
     project_id = 'learning-from-play-303306'
-    bucket_name = 'lfp_europe_west4_a'
     #     if region != 'Iowa':
-    logging.warning(f'You are accessing GCS data from {region}, make sure this is the same as your bucket {bucket_name}')
-    STORAGE_PATH = Pathy(f'gs://{bucket_name}')
+    logging.warning(f'You are accessing GCS data from {region}, make sure this is the same as your bucket {args.bucket_name}')
+    STORAGE_PATH = Pathy(f'gs://{args.bucket_name}')
 else:
     print('Reading data from local filesystem')
     STORAGE_PATH = WORKING_PATH
