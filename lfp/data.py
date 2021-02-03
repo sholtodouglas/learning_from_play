@@ -246,11 +246,16 @@ class PlayDataloader():
         
         # Preprocessing
         # TODO: make this static normalization by some constant
+        def normalize_with_moments(x, axes=[0, 1], epsilon=1e-8):
+            mean, variance = tf.nn.moments(x, axes=axes)
+            x_normed = (x - mean) / tf.sqrt(variance + epsilon)  # epsilon to avoid dividing by zero
+            return x_normed
+
         if self.normalize:
             # Record the mean like we used to @Tristan
-            sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
+            obs = normalize_with_moments(obs)
+            goals = normalize_with_moments(goals)
+            acts = normalize_with_moments(acts)
         
         return {'obs':obs, 
                 'acts':acts, 
