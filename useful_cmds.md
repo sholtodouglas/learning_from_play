@@ -18,6 +18,8 @@ ctpu up \
 
 # ssh into vm instance
 
+See more info here: https://cloud.google.com/sdk/docs/quickstart
+
 ```gcloud compute ssh root@$TPU_NAME --zone=$TPU_ZONE```
 
 # optionally clone the repo if not already there
@@ -31,7 +33,7 @@ cd learning_from_play
 # Run the sample training script for GCS setup
 
 ```
-python3 notebooks/train_lfp.py \
+python3 train_lfp.py \
 tpuv3-test \
 --train_dataset UR5 UR5_slow_gripper UR5_high_transition \
 --test_dataset UR5_slow_gripper_test \
@@ -44,7 +46,7 @@ tpuv3-test \
 -lp 512 \
 -z 256 \
 -lr 3e-4 \
---bucket_name=$BUCKET_NAME
+--bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
 ```
 
