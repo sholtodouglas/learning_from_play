@@ -133,7 +133,7 @@ print("Tensorflow version " + tf.__version__)
 
 if args.device == 'TPU':
     try:
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver()  # TPU detection
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args.tpu_name)  # TPU detection
         print('Running on TPU ', tpu.cluster_spec().as_dict()['worker'])
     except ValueError:
         raise BaseException('ERROR: Not connected to a TPU runtime; please see the previous cell in this notebook for instructions!')

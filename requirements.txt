@@ -1,6 +1,6 @@
 numpy
-matplotlib
-plotly
+matplotlib==3.2.2
+plotly==4.4.1
 seaborn
 pybullet>=3.0.8
 wandb
