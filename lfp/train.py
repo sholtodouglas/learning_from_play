@@ -296,7 +296,7 @@ class LFPTrainer():
             losses = self.distribute_strategy.reduce(ReduceOp.MEAN, per_replica_losses, axis=None)
             return losses
         else:
-            per_replica_losses ze, zp = self.distribute_strategy.run(self.test_step,
+            per_replica_losses, ze, zp = self.distribute_strategy.run(self.test_step,
                                                                                args=(dataset_inputs, beta))
             losses = self.distribute_strategy.reduce(ReduceOp.MEAN, per_replica_losses, axis=None)
             return losses, ze.values[0], zp.values[0]
