@@ -1,8 +1,30 @@
+# Setup 
+wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && chmod a+x ctpu
+
+
+
 # Available resources for TFRC
 
 * 5 on-demand Cloud TPU v2-8 device(s) in zone us-central1-f
 * 100 preemptible Cloud TPU v2-8 device(s) in zone us-central1-f
 * 5 on-demand Cloud TPU v3-8 device(s) in zone europe-west4-a
+
+
+europe-west4-a, lfp_europe_west4_a
+
+
+
+# Iowa (v2-8)
+export TPU_ZONE=us-central1-f
+export TPU_NAME=lfp_test
+export BUCKET_NAME=iowa_bucket_lfp
+export TPU_SIZE=v2-8
+
+# Europe (v3-8)
+export TPU_ZONE=europe-west4-a
+export TPU_NAME=lfp_test
+export BUCKET_NAME=lfp_europe_west4_a
+export TPU_SIZE=v3-8
 
 # Creating TPU + VM
 
@@ -12,7 +34,11 @@ ctpu up \
 --zone=$TPU_ZONE \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
---tpu-size=["v2-8"|"v3-8] \
+--tpu-size=[$TPU_ZONE]
+
+
+
+ \
 [--preemptible]
 ```
 

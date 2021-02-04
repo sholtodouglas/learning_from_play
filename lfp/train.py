@@ -67,10 +67,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-    # Losses
-    nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
-    mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
-    mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+
 
     def __init__(self, dataloader, actor, probabilistic, encoder=None, planner=None,
                  distribute_strategy=None, learning_rate='3e-4', plan_lr_multiplier=1, clipnorm=5.0, gcbc=False):
@@ -84,67 +81,75 @@ class LFPTrainer():
         self.quaternion_act = dataloader.quaternion_act
         self.batch_size = dataloader.batch_size
 
-        # self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        # self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
-        # self.planner_optimizer = Adam(learning_rate=learning_rate*plan_lr_multiplier, global_clipnorm=clipnorm)
-
-        self.global_optimizer = Adam(learning_rate=learning_rate)
-
-        self.actor_grad_len  = len(self.actor.trainable_variables)
-        if not self.gcbc:
-            self.encoder_grad_len = len(self.encoder.trainable_variables)
-            self.planner_grad_len = len(self.planner.trainable_variables)
-
-        # Metrics
-        self.metrics = {}
-        self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
-        self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
-        self.metrics['actor_grad_norm_clipped'] = tf.keras.metrics.Mean(name='actor_grad_clipped')
-        self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
-        self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
-        self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
-        self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
-        self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
-        self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_gripper_loss')
-        self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
-        if not self.gcbc:
-            self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='train_reg_loss')
-            self.metrics['train_act_with_enc_loss'] = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
-            self.metrics['train_act_with_plan_loss'] = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
-            self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
-            self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
-            self.metrics['encoder_grad_norm_clipped'] = tf.keras.metrics.Mean(name='encoder_grad_norm_clipped')
-            self.metrics['planner_grad_norm_clipped'] = tf.keras.metrics.Mean(name='planner_grad_norm_clipped')
-            self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
-            self.metrics['valid_act_with_enc_loss'] = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
-            self.metrics['valid_act_with_plan_loss'] = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
 
 
 
+        with self.distribute_strategy.scope():
+            # self.actor_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+            # self.encoder_optimizer = Adam(learning_rate=learning_rate, global_clipnorm=clipnorm)
+            # self.planner_optimizer = Adam(learning_rate=learning_rate*plan_lr_multiplier, global_clipnorm=clipnorm)
+            self.global_optimizer = Adam(learning_rate=learning_rate)
+
+            self.actor_grad_len  = len(self.actor.trainable_variables)
+            if not self.gcbc:
+                self.encoder_grad_len = len(self.encoder.trainable_variables)
+                self.planner_grad_len = len(self.planner.trainable_variables)
+
+            # Metrics
+            self.metrics = {}
+            self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
+            self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
+            self.metrics['actor_grad_norm_clipped'] = tf.keras.metrics.Mean(name='actor_grad_clipped')
+            self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
+            self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
+            self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
+            self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
+            self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
+            self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_gripper_loss')
+            self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
+
+            def compute_loss(labels, predictions, mask, seq_lens):
+                if self.probabilistic:
+                    per_example_loss = self.nll_action_loss(labels, predictions) * mask
+                else:
+                    per_example_loss = self.mae_action_loss(labels, predictions) * mask
+
+                per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
+                return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
 
 
-        
-
-    def compute_loss(self, labels, predictions, mask, seq_lens):
-        if self.probabilistic:
-            per_example_loss = self.nll_action_loss(labels, predictions) * mask
-        else:
-            per_example_loss = self.mae_action_loss(labels, predictions) * mask
-
-        per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
-        return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
+            def compute_MAE(labels, predictions, mask, seq_lens, weightings=None):
+                per_example_loss = self.mae_action_loss(labels, predictions) * mask
+                per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
+                return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
 
 
-    def compute_MAE(self, labels, predictions, mask, seq_lens, weightings=None):
-        per_example_loss = self.mae_action_loss(labels, predictions) * mask
-        per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
-        return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
+            def compute_regularisation_loss(plan, encoding):
+                # Reverse KL(enc|plan): we want planner to map to encoder (weighted by encoder)
+                reg_loss = tfp.distributions.kl_divergence(encoding, plan)
+                return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.batch_size)
+
+            # Losses # done this way so that they are in stratey scope
+            self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
+            self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
+            self.mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+            self.compute_loss = compute_loss
+            self.compute_MAE = compute_MAE
+            self.compute_regularisation_loss
 
 
-    def compute_regularisation_loss(self, plan, encoding):
-        # Reverse KL(enc|plan): we want planner to map to encoder (weighted by encoder)
-        reg_loss = tfp.distributions.kl_divergence(encoding, plan)
-        return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.batch_size)
+
+            if not self.gcbc:
+                self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='train_reg_loss')
+                self.metrics['train_act_with_enc_loss'] = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
+                self.metrics['train_act_with_plan_loss'] = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
+                self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
+                self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
+                self.metrics['encoder_grad_norm_clipped'] = tf.keras.metrics.Mean(name='encoder_grad_norm_clipped')
+                self.metrics['planner_grad_norm_clipped'] = tf.keras.metrics.Mean(name='planner_grad_norm_clipped')
+                self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
+                self.metrics['valid_act_with_enc_loss'] = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
+                self.metrics['valid_act_with_plan_loss'] = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
 
 
     # Now outside strategy .scope
