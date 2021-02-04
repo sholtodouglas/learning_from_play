@@ -135,7 +135,7 @@ class LFPTrainer():
             self.mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
             self.compute_loss = compute_loss
             self.compute_MAE = compute_MAE
-            self.compute_regularisation_loss
+            self.compute_regularisation_loss = compute_regularisation_loss
 
 
 
