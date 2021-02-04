@@ -99,21 +99,28 @@ class LFPTrainer():
         self.metrics = {}
         self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
         self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
+        self.metrics['actor_grad_clipped'] = tf.keras.metrics.Mean(name='actor_grad_clipped')
         self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
         self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
         self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
         self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
         self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
         self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_gripper_loss')
+        self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
         if not self.gcbc:
             self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='train_reg_loss')
             self.metrics['train_act_with_enc_loss'] = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
             self.metrics['train_act_with_plan_loss'] = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
             self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
             self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
+            self.metrics['encoder_grad_norm_clipped'] = tf.keras.metrics.Mean(name='encoder_grad_norm_clipped')
+            self.metrics['planner_grad_norm_clipped'] = tf.keras.metrics.Mean(name='planner_grad_norm_clipped')
             self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
             self.metrics['valid_act_with_enc_loss'] = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
             self.metrics['valid_act_with_plan_loss'] = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
+
+
+
 
 
         
@@ -177,11 +184,6 @@ class LFPTrainer():
                 # planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
                 # all_gradients = actor_gradients + encoder_gradients + planner_gradients # concat lists
 
-                # # Gradient norms
-                # actor_norm = tf.linalg.global_norm(actor_gradients)
-                # encoder_norm = tf.linalg.global_norm(encoder_gradients)
-                # planner_norm = tf.linalg.global_norm(planner_gradients)
-
                 gradients = tape.gradient(loss, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables)
 
                 actor_gradients = gradients[:self.actor_grad_len]
@@ -201,17 +203,13 @@ class LFPTrainer():
 
                 self.global_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables))
 
-                # global_norm = tf.linalg.global_norm(all_gradients)
-                # actor_grad_norm_clipped.update_state(actor_norm_clipped)
-                # encoder_grad_norm_clipped.update_state(encoder_norm_clipped)
-                # planner_grad_norm_clipped.update_state(planner_norm_clipped)
-
                 # # Optimizer step
                 # self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
                 # self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
                 # self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
                 # Train Metrics
+                self.metrics['global_grad_norm'].update_state(tf.linalg.global_norm(gradients))
                 self.metrics['train_reg_loss'].update_state(reg_loss)
                 self.metrics['train_act_with_enc_loss'].update_state(act_enc_loss)
                 self.metrics['train_act_with_plan_loss'].update_state(act_plan_loss)
@@ -343,7 +341,7 @@ class LFPTrainer():
             
         if with_optimizer:
             #self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
-            self.load_optimizer_state(self.global_optimizer, f'{path}/optimizers/optimizer.npy', self.actor.trainable_variablesself.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables)
+            self.load_optimizer_state(self.global_optimizer, f'{path}/optimizers/optimizer.npy', self.actor.trainable_variables+self.encoder.trainable_variables+self.planner.trainable_variables)
             # if not self.gcbc:
             #     self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy', self.encoder.trainable_variables)
             #     self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy', self.planner.trainable_variables)
