@@ -278,12 +278,10 @@ class LFPTrainer():
         self.metrics['valid_gripper_loss'].update_state(self.compute_MAE(true_grip_act, grip_act, mask, seq_lens))
         self.metrics['valid_loss'].update_state(loss)
 
-
-
         if self.gcbc:
             return loss
         else:
-            return loss z_enc, z_plan
+            return loss, z_enc, z_plan
 
     @tf.function
     def distributed_train_step(self, dataset_inputs, beta, prev_global_grad_norm):
