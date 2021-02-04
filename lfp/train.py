@@ -99,7 +99,7 @@ class LFPTrainer():
         self.metrics = {}
         self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
         self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
-        self.metrics['actor_grad_clipped'] = tf.keras.metrics.Mean(name='actor_grad_clipped')
+        self.metrics['actor_grad_norm_clipped'] = tf.keras.metrics.Mean(name='actor_grad_clipped')
         self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
         self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
         self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
