@@ -263,7 +263,7 @@ best_valid_loss = np.float('inf')
 valid_inc = 20
 save_inc = 1000
 
-prev_grad_norm = np.float('inf')
+prev_global_grad_norm = np.float('inf')
 
 
 # In[54]:
@@ -286,19 +286,24 @@ else:
 
 # In[ ]:
 
+from lfp.metric import log # gets state and clears simultaneously
+
 
 while t < args.train_steps:
     start_time = time.time()
     beta = beta_sched.scheduler(t)
     x = next(train_dataset)
-    total_train_loss = trainer.distributed_train_step(x, beta)
-    
+    total_train_loss = trainer.distributed_train_step(x, beta, prev_global_grad_norm)
+    prev_global_grad_norm = log(trainer.metrics['global_grad_norm'])
+
     if t % valid_inc == 0:  
         valid_x = next(valid_dataset)
         if args.gcbc:
-            total_val_loss, metrics = trainer.distributed_test_step(valid_x, beta)
+            total_val_loss= trainer.distributed_test_step(valid_x, beta)
         else:
-            total_val_loss, metrics, ze, zp = trainer.distributed_test_step(valid_x, beta)
+            total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
+
+        metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
 
         # validation plotting
         progbar.add(valid_inc, [('Train Loss', metrics['train_loss']), 
@@ -310,7 +315,7 @@ while t < args.train_steps:
     if t % save_inc == 0:
         trainer.save_weights(model_path, args, wandb.run.id)
         if not args.gcbc:
-            z_enc, z_plan = lfp.plotting.produce_cluster_fig(next(plotting_dataset), trainer.encoder, trainer.planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//NUM_DEVICES)
+            z_enc, z_plan = lfp.plotting.produce_cluster_fig(next(plotting_dataset), trainer.encoder, trainer.planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
             convergence_plot = lfp.plotting.project_enc_and_plan(ze, zp)
             wandb.log({'z_enc':z_enc, 'z_plan':z_plan, 'convergence_plot':convergence_plot}, step=t)
     t += 1
