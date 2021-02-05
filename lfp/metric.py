@@ -68,7 +68,7 @@ def create_metrics():
 
 
 
-def log_action_breakdown(policy, actions, mask, seq_lens, probabilistic, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss, compute_MAE):
+def log_action_breakdown(policy, actions, mask, seq_lens, probabilistic, quat_act, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss, compute_MAE):
     if quat_act:
         # xyz, q1-4, grip
         action_breakdown = [3, 4, 1]
