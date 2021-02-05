@@ -68,7 +68,7 @@ def create_metrics():
 
 
 
-def log_action_breakdown(policy, actions, mask, seq_lens, config, quat_act, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss, compute_MAE):
+def log_action_breakdown(policy, actions, mask, seq_lens, config, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss, compute_MAE):
     if quat_act:
         # xyz, q1-4, grip
         action_breakdown = [3, 4, 1]
@@ -76,7 +76,7 @@ def log_action_breakdown(policy, actions, mask, seq_lens, config, quat_act, vali
         action_breakdown = [3, 3, 1]
 
     # pos, rot, gripper individual losses
-    if config['num_distribs'] is not None:
+    if config.num_distribs is not None:
         pos_acts, rot_acts, grip_act = tf.split(policy.sample(), action_breakdown, -1)
     else:
         pos_acts, rot_acts, grip_act = tf.split(policy, action_breakdown, -1)
