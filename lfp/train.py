@@ -147,7 +147,7 @@ class LFPTrainer():
               distrib = self.actor([states, goals])
               loss = self.compute_loss(actions, distrib, mask, seq_lens)
               gradients = tape.gradient(loss, self.actor.trainable_variables)
-              optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
+              self.optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
           else:
               encoding = self.encoder([states, actions])
               plan = self.planner([states[:, 0, :], goals[:, 0,:]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal. 
@@ -258,7 +258,7 @@ class LFPTrainer():
             self.planner.save_weights(f'{path}/planner.h5')
 
         os.makedirs(path+'/optimizers', exist_ok=True)
-        np.save(f'{path}/optimizers/optimizer.npy', optimizer.get_weights(), allow_pickle=True)
+        np.save(f'{path}/optimizers/optimizer.npy', self.optimizer.get_weights(), allow_pickle=True)
 
 
   def load_weights(self, path, with_optimizer=False, step=""):
