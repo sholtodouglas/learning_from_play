@@ -5,31 +5,32 @@
 
 
 # In[20]:
-
+# import comet_ml at the top of your file
+from comet_ml import Experiment
 
 import argparse
+
 
 parser = argparse.ArgumentParser(description='LFP training arguments')
 parser.add_argument('run_name')
 parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
 parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
-parser.add_argument('-s', '--data_source', default='LOCAL', choices=['LOCAL', 'DRIVE', 'GCS'], help='Source of training data')
+parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
-parser.add_argument('-d', '--device', default='CPU', choices=['CPU', 'GPU', 'TPU'],  help='Hardware device to train on')
-parser.add_argument('-b', '--batch_size', default=32, type=int)
-parser.add_argument('-la', '--actor_layer_size', default=256, type=int, help='Layer size of actor, increases size of neural net')
-parser.add_argument('-le', '--encoder_layer_size', default=256, type=int, help='Layer size of encoder, increases size of neural net')
-parser.add_argument('-lp', '--planner_layer_size', default=256, type=int, help='Layer size of planner, increases size of neural net')
-parser.add_argument('-z', '--latent_dim', default=32, type=int, help='Size of the VAE latent space')
+parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
+parser.add_argument('-b', '--batch_size', default=512, type=int)
+parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
+parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
+parser.add_argument('-lp', '--planner_layer_size', default=512, type=int, help='Layer size of planner, increases size of neural net')
+parser.add_argument('-z', '--latent_dim', default=256, type=int, help='Size of the VAE latent space')
 parser.add_argument('-g', '--gcbc', default=False, action='store_true', help='Enables GCBC, a simpler model with no encoder/planner')
 parser.add_argument('-n', '--num_distribs', default=None, type=int, help='Number of distributions to use in logistic mixture model')
 parser.add_argument('-q', '--qbits', default=None, type=int, help='Number of quantisation bits to discrete distributions into. Total quantisations = 2**qbits')
 parser.add_argument('-lr', '--learning_rate', type=float, default=3e-4)
-parser.add_argument('-t', '--train_steps', type=int, default=100000)
+parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
-
-parser.add_argument('--gradient_clipnorm', type=float, default=1.0)
+parser.add_argument('-B', '--beta', default=0.00003)
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name')
@@ -72,6 +73,8 @@ import numpy as np
 import tensorflow as tf
 import time
 import wandb
+
+
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -201,107 +204,113 @@ valid_dataset = dl.load(valid_data)
 # In[51]:
 
 
+from lfp.train import LFPTrainer
+
 def train_setup():
     model_params = {'obs_dim':dl.obs_dim,
-                    'goal_dim':dl.goal_dim,
-                    'act_dim':dl.act_dim,
-                    'latent_dim':args.latent_dim}
+                'goal_dim':dl.goal_dim,
+                'act_dim':dl.act_dim,
+                'layer_size':args.actor_layer_size, 
+                'latent_dim':args.latent_dim}
     
-    actor = lfp.model.create_actor(layer_size=args.actor_layer_size, gcbc=args.gcbc, num_distribs=args.num_distribs, **model_params)
+    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs)
 
     if args.gcbc:
         encoder = None
         planner = None
     else:
-        encoder = lfp.model.create_encoder(layer_size=args.encoder_layer_size, **model_params)
-        planner = lfp.model.create_planner(layer_size=args.planner_layer_size, **model_params)
-        
-    trainer = lfp.train.LFPTrainer(dl, 
-                                 actor,
-                                 encoder=encoder, 
-                                 planner=planner, 
-                                 probabilistic=args.num_distribs is not None,
-                                 distribute_strategy=strategy,
-                                 learning_rate=args.learning_rate,
-                                 clipnorm=args.gradient_clipnorm,
-                                 gcbc=args.gcbc)
-    
-    return trainer
+        model_params['layer_size'] = args.encoder_layer_size
+        encoder = lfp.model.create_encoder(**model_params)
+        model_params['layer_size'] = args.planner_layer_size
+        planner = lfp.model.create_planner(**model_params)
 
-if args.device=='GPU' or args.device == 'CPU':
-    trainer = train_setup()
-    train_dataset = iter(train_dataset)
-    valid_dataset = iter(valid_dataset)
-    plotting_dataset = valid_dataset # For consistnecy with the distributed form 
+    optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+    trainable_variables = actor.trainable_variables + encoder.trainable_variables + planner.trainable_variables
+    return actor, encoder, planner, optimizer, trainable_variables
+
+if args.device=='CPU' or args.device=='GPU':
+    actor, encoder, planner, optimizer, trainable_variables = train_setup()
 else:
     with strategy.scope():
-        trainer = train_setup()   
-    train_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
-    plotting_dataset = iter(valid_dataset) # for the cluster fig, easier with a non distributed dataset
-    valid_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
+        actor, encoder, planner, optimizer, trainable_variables = train_setup()
+        trainer= LFPTrainer(actor, encoder, planner, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+        
+train_dist_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
+valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
+plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
 
 
 # In[52]:
 
 
-# 0.00001 so far works best for MAE - try lower - 0.00003 with a BETA accel of 10 so far works best, perfect encoder, nicely mapped planner
-# recall 0.01 worked okay for probabilistic - proba still too unstable!
-beta_sched = lfp.train.BetaScheduler('linear', 
-                                   beta=0.00003, 
-                                   beta_max=0.00003, 
-                                   max_steps=args.train_steps, 
-                                   cycles=90, 
-                                   duty_cycle=0.5)
+from lfp.train import BetaScheduler
+
+beta_sched = BetaScheduler('linear', 
+                           beta=args.beta, 
+                           beta_max=args.beta, 
+                           max_steps=TRAIN_STEPS, 
+                           cycles=90, 
+                           duty_cycle=0.5
+                           )
 
 
 # In[53]:
 
 
-progbar = tf.keras.utils.Progbar(args.train_steps, verbose=1, interval=0.5)
-best_valid_loss = np.float('inf')
-
+from tensorflow.keras.utils import Progbar
+progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
 save_inc = 1000
-
-prev_global_grad_norm = np.float('inf')
+prev_grad_norm = np.float('inf')
 
 
 # In[54]:
 
 
-model_path = f'/content/drive/My Drive/Robotic Learning/saved_models/{args.run_name}/'
+run_name = args.run_name
+model_path = f'/content/drive/My Drive/Robotic Learning/saved_models/{run_name}/'
 
 if args.resume:
-    with open(model_path+'/config.json') as json_file:
-        data = json.load(json_file)
-        wandb.init(project="learning-from-play_v2", id=data['run_id'], resume="must")
-        trainer.load_weights(model_path, with_optimizer=True)
-        print('Loaded model weights and optimiser state')
-        t = wandb.run.step + valid_inc
+  # WandB reinit
+  with open(f'{model_path}/config.json', 'r') as f:
+      data = json.load(f)
+  # Comet ML reinit
+  exp = ExistingExperiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",  previous_experiment=data['experiment_key'])
+
+  wandb.init(project="learning-from-play_v2", id=data['run_id'],  resume="must")
+  t = wandb.run.step + valid_inc # Todo get this from comet to complete the transition
+
+  load_weights(model_path, actor, encoder, planner, with_optimizer=True)
+  print('Loaded model weights and optimiser state')
+  
+  prognar.add(t, []) # update the progbar to the most recent point
 else:
-    wandb.init(project="learning-from-play_v2", config=args)
-    wandb.run.name = args.run_name
-    t = 0
+  #Comet
+  experiment = Experiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",project_name="learning-from-play",workspace="sholtodouglas")
+  experiment.set_name(run_name)
+  # WandB
+  wandb.init(project="learning-from-play_v2")
+  wandb.run.name = run_name
+  t = 0
 
 
 # In[ ]:
-
+from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_imag
 from lfp.metric import log # gets state and clears simultaneously
 
 
 while t < args.train_steps:
     start_time = time.time()
     beta = beta_sched.scheduler(t)
-    x = next(train_dataset)
-    total_train_loss = trainer.distributed_train_step(x, beta, prev_global_grad_norm)
-    prev_global_grad_norm = log(trainer.metrics['global_grad_norm'])
-
+    x = next(train_dist_dataset)
+    total_train_loss = trainer.distributed_train_step(x, beta, prev_grad_norm)
+    
     if t % valid_inc == 0:  
-        valid_x = next(valid_dataset)
+        valid_x = next(valid_dist_dataset)
         if args.gcbc:
-            total_val_loss= trainer.distributed_test_step(valid_x, beta)
+          total_val_loss = trainer.distributed_test_step(valid_x, beta)
         else:
-            total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
+          total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
 
@@ -309,20 +318,29 @@ while t < args.train_steps:
         progbar.add(valid_inc, [('Train Loss', metrics['train_loss']), 
                                 ('Validation Loss', metrics['valid_loss']), 
                                 ('Time (s)', round(time.time() - start_time, 1))])
-
+        #Plot on Comet
+        experiment.log_metrics(metrics,step=t)
+        # Plot on WandB
         wandb.log(metrics, step=t)
+
+        prev_grad_norm = metrics['global_grad_norm']
           
     if t % save_inc == 0:
-        trainer.save_weights(model_path, args, wandb.run.id)
+        trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
         if not args.gcbc:
-            z_enc, z_plan = lfp.plotting.produce_cluster_fig(next(plotting_dataset), trainer.encoder, trainer.planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
-            convergence_plot = lfp.plotting.project_enc_and_plan(ze, zp)
-            wandb.log({'z_enc':z_enc, 'z_plan':z_plan, 'convergence_plot':convergence_plot}, step=t)
+          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+
+          #Comet
+          experiment.log_figure('z_enc', z_enc, step=t)
+          experiment.log_figure('z_plan', z_plan,step=t)
+
+          # WandB
+          wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
+          
+          #latent_fig = project_enc_and_plan(ze, zp)
+          #latent_img = plot_to_image(latent_fig)
+
     t += 1
-
-
-# In[ ]:
-
 
 
 
