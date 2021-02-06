@@ -72,7 +72,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-  def __init__(self, actor, encoder, planner, optimizer, strategy, args, dl):
+  def __init__(self, actor, encoder, planner, optimizer, strategy, args, dl, global_batch_size):
 
     self.actor = actor
     self.encoder = encoder
@@ -81,6 +81,7 @@ class LFPTrainer():
     self.strategy = strategy 
     self.args = args
     self.dl = dl
+    self.global_batch_size = global_batch_size
     self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
     self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
     self.mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
@@ -122,19 +123,19 @@ class LFPTrainer():
           per_example_loss = self.mae_action_loss(labels, predictions) * mask
 
       per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
-      return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.dl.batch_size )
+      return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
 
   def compute_MAE(self, labels, predictions, mask, seq_lens, weightings=None):
       per_example_loss = self.mae_action_loss(labels, predictions) * mask
       per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
-      return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.dl.batch_size )
+      return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
 
   def compute_regularisation_loss(self, plan, encoding):
       # Reverse KL(enc|plan): we want planner to map to encoder (weighted by encoder)
       reg_loss = tfd.kl_divergence(encoding, plan)  # + KL(plan, encoding)
-      return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.dl.batch_size )
+      return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.global_batch_size)
 
 
   def train_step(self, inputs, beta, prev_global_grad_norm):

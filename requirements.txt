@@ -9,6 +9,7 @@ tensorflow-probability
 tensorflow-addons
 requests
 pathy
+comet_ml
 natsort
 tqdm
 umap-learn
