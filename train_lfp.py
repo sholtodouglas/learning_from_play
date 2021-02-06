@@ -7,6 +7,8 @@
 # In[20]:
 # import comet_ml at the top of your file
 from comet_ml import Experiment
+import wandb
+wandb.login()
 
 import argparse
 
@@ -72,13 +74,12 @@ import logging
 import numpy as np
 import tensorflow as tf
 import time
-import wandb
 
 
 
 pp = pprint.PrettyPrinter(indent=4)
 
-wandb.login()
+
 
 
 # In[4]:
@@ -260,7 +261,7 @@ beta_sched = BetaScheduler('linear',
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
-save_inc = 1000
+save_inc = 2000
 prev_grad_norm = np.float('inf')
 
 
@@ -268,7 +269,7 @@ prev_grad_norm = np.float('inf')
 
 
 run_name = args.run_name
-model_path = f'/content/drive/My Drive/Robotic Learning/saved_models/{run_name}/'
+model_path = str(STORAGE_PATH/'saved_models'/args.run_name)
 
 if args.resume:
   # WandB reinit
