@@ -179,9 +179,6 @@ else:
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
 
 dl = lfp.data.PlayDataloader(batch_size=GLOBAL_BATCH_SIZE)
-dl.shuffle_size = GLOBAL_BATCH_SIZE * 1 # May need to be smaller with images - lets test
-
-
 # In[49]:
 
 
