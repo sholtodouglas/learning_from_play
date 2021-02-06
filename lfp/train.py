@@ -225,18 +225,18 @@ class LFPTrainer():
 
   @tf.function
   def distributed_train_step(self,dataset_inputs, beta, prev_global_grad_norm):
-      per_replica_losses = strategy.run(self.train_step, args=(dataset_inputs, beta, prev_global_grad_norm))
-      return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+      per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, prev_global_grad_norm))
+      return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
   @tf.function
   def distributed_test_step(self,dataset_inputs, beta):
       if self.args.gcbc:
-          per_replica_losses = strategy.run(self.test_step, args=(dataset_inputs, beta))
-          return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+          per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
+          return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
       else:
-          per_replica_losses, ze, zp = strategy.run(self.test_step, args=(dataset_inputs, beta))
-          return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), ze.values[0], zp.values[0]
+          per_replica_losses, ze, zp = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
+          return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), ze.values[0], zp.values[0]
 
 
   def save_weights(self, path, run_id=None, step=""):
