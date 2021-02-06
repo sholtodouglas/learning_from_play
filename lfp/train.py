@@ -110,9 +110,9 @@ class LFPTrainer():
     self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
 
     self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
-    self.metrics['valid_max_position_loss'] = lfp.Metric.MaxMetric(name='valid_max_position_loss')
+    self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
     self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
-    self.metrics['valid_max_rotation_loss'] = lfp.Metric.MaxMetric(name='valid_max_rotation_loss')
+    self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
     self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
   def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
