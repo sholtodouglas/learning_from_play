@@ -16,7 +16,7 @@ import os
 import wandb
 import json
 
-from lfp.metric import MaxMetric, record, log_action_breakdown
+from lfp.metric import record, log_action_breakdown
 
 
 class BetaScheduler():
@@ -110,9 +110,9 @@ class LFPTrainer():
     self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
 
     self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
-    self.metrics['valid_max_position_loss'] = MaxMetric(name='valid_max_position_loss')
+    self.metrics['valid_max_position_loss'] = lfp.Metric.MaxMetric(name='valid_max_position_loss')
     self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
-    self.metrics['valid_max_rotation_loss'] = MaxMetric(name='valid_max_rotation_loss')
+    self.metrics['valid_max_rotation_loss'] = lfp.Metric.MaxMetric(name='valid_max_rotation_loss')
     self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
   def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
