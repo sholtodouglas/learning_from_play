@@ -116,6 +116,8 @@ class LFPTrainer():
     self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
     self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
+    self.chkpt_manager = None
+
 
 
 
@@ -248,10 +250,10 @@ class LFPTrainer():
         if self.args.data_source == 'GCS':
             if self.chkpt_manager == None:
                 ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=self.optimizer, actor=self.actor, encoder=self.encoder, planner=self.planner)
-                self.manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
-                save_path = self.manager.save()
+                self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
+                save_path = self.chkpt_manager.save()
             else:
-                save_path = self.manager.save()
+                save_path = self.chkpt_manager.save()
         else: # We have to save it all to drive
             os.makedirs(path, exist_ok=True)
 
