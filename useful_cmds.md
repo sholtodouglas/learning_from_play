@@ -1,7 +1,3 @@
-# Setup 
-wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && chmod a+x ctpu
-
-
 
 # Available resources for TFRC
 

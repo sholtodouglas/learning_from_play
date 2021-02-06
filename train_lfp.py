@@ -225,15 +225,15 @@ def train_setup():
         planner = lfp.model.create_planner(**model_params)
 
     optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
-    trainable_variables = actor.trainable_variables + encoder.trainable_variables + planner.trainable_variables
-    return actor, encoder, planner, optimizer, trainable_variables
+    trainer = LFPTrainer(actor, encoder, planner, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+    return actor, encoder, planner, trainer
 
 if args.device=='CPU' or args.device=='GPU':
-    actor, encoder, planner, optimizer, trainable_variables = train_setup()
+     actor, encoder, planner, trainer = train_setup()
 else:
     with strategy.scope():
-        actor, encoder, planner, optimizer, trainable_variables = train_setup()
-        trainer= LFPTrainer(actor, encoder, planner, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+         actor, encoder, planner, trainer = train_setup()
+        
         
 train_dist_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
 valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
