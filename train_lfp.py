@@ -30,7 +30,7 @@ parser.add_argument('-q', '--qbits', default=None, type=int, help='Number of qua
 parser.add_argument('-lr', '--learning_rate', type=float, default=3e-4)
 parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
-parser.add_argument('-B', '--beta', default=0.00003)
+parser.add_argument('-B', '--beta', type=float, default=0.00003)
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name')
