@@ -239,7 +239,7 @@ class LFPTrainer():
           return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), ze.values[0], zp.values[0]
 
 
-  def save_weights(self, path, run_id=None, step=""):
+  def save_weights(self, path, run_id=None, experiment_key=None, step=""):
         os.makedirs(path, exist_ok=True)
 
         # Save the config as json
@@ -247,6 +247,7 @@ class LFPTrainer():
         with open(f'{path}/config.json', 'w') as f:
             d = vars(self.args)
             d['run_id'] = run_id
+            d['experiment_key'] = experiment_key
             d['relative_act'] = self.dl.relative_act
             d['joints'] = self.dl.joints
             d['quaternion_act'] = self.dl.quaternion_act
