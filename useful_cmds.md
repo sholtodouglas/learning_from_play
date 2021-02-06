@@ -18,7 +18,7 @@ export TPU_SIZE=v2-8
 
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
-export TPU_NAME=lfp_test
+export TPU_NAME=lfp1
 export BUCKET_NAME=lfp_europe_west4_a
 export TPU_SIZE=v3-8
 
@@ -30,7 +30,7 @@ ctpu up \
 --zone=$TPU_ZONE \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
---tpu-size=[$TPU_ZONE]
+--tpu-size=$TPU_SIZE
 
 
 
@@ -43,6 +43,9 @@ ctpu up \
 See more info here: https://cloud.google.com/sdk/docs/quickstart
 
 ```gcloud compute ssh root@$TPU_NAME --zone=$TPU_ZONE```
+
+
+# Use tmux so that the process keeps running after ssh disconnect
 
 # optionally clone the repo if not already there
 ```
@@ -68,6 +71,7 @@ tpuv3-test \
 -lp 512 \
 -z 256 \
 -lr 3e-4 \
+-B 0.00003 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
 ```

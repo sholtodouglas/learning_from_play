@@ -295,7 +295,7 @@ else:
 
 
 # In[ ]:
-from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_imag
+from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
 
