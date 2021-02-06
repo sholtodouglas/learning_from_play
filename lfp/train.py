@@ -116,6 +116,9 @@ class LFPTrainer():
     self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
     self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
+
+
+
   def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
       if self.args.num_distribs is not None:
           per_example_loss = self.nll_action_loss(labels, predictions) * mask
@@ -241,30 +244,38 @@ class LFPTrainer():
 
 
   def save_weights(self, path, run_id=None, experiment_key=None, step=""):
-        os.makedirs(path, exist_ok=True)
 
-        # Save the config as json
-        print('Saving training config...')
-        with open(f'{path}/config.json', 'w') as f:
-            d = vars(self.args)
-            d['run_id'] = run_id
-            d['experiment_key'] = experiment_key
-            d['relative_act'] = self.dl.relative_act
-            d['joints'] = self.dl.joints
-            d['quaternion_act'] = self.dl.quaternion_act
-            json.dump(d, f)
+        if self.args.data_source == 'GCS':
+            if self.chkpt_manager == None:
+                ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=self.optimizer, actor=self.actor, encoder=self.encoder, planner=self.planner)
+                self.manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
+            else:
+                save_path = self.manager.save()
+        else: # We have to save it all to drive
+            os.makedirs(path, exist_ok=True)
 
-        self.actor.save_weights(f'{path}/actor.h5')
-        if not self.args.gcbc:
-            self.encoder.save_weights(f'{path}/encoder.h5')
-            self.planner.save_weights(f'{path}/planner.h5')
+            # Save the config as json
+            print('Saving training config...')
+            with open(f'{path}/config.json', 'w') as f:
+                d = vars(self.args)
+                d['run_id'] = run_id
+                d['experiment_key'] = experiment_key
+                d['relative_act'] = self.dl.relative_act
+                d['joints'] = self.dl.joints
+                d['quaternion_act'] = self.dl.quaternion_act
+                json.dump(d, f)
 
-        os.makedirs(path+'/optimizers', exist_ok=True)
-        np.save(f'{path}/optimizers/optimizer.npy', self.optimizer.get_weights(), allow_pickle=True)
+            self.actor.save_weights(f'{path}/actor.h5')
+            if not self.args.gcbc:
+                self.encoder.save_weights(f'{path}/encoder.h5')
+                self.planner.save_weights(f'{path}/planner.h5')
+
+            os.makedirs(path+'/optimizers', exist_ok=True)
+            np.save(f'{path}/optimizers/optimizer.npy', self.optimizer.get_weights(), allow_pickle=True)
 
 
   def load_weights(self, path, with_optimizer=False, step=""):
-      # IMO better to load timestepped version from subfolders - Todo
+      # TODO: Load from CKPT
       self.actor.load_weights(f'{path}/actor.h5')
       if not self.args.gcbc:
           self.encoder.load_weights(f'{path}/encoder.h5')
