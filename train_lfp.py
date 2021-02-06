@@ -248,7 +248,7 @@ from lfp.train import BetaScheduler
 beta_sched = BetaScheduler('linear', 
                            beta=args.beta, 
                            beta_max=args.beta, 
-                           max_steps=TRAIN_STEPS, 
+                           max_steps=args.train_steps, 
                            cycles=90, 
                            duty_cycle=0.5
                            )
