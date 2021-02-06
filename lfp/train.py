@@ -248,9 +248,9 @@ class LFPTrainer():
   def save_weights(self, path, run_id=None, experiment_key=None, step=""):
 
         if self.args.data_source == 'GCS':
-            if self.chkpt_manager == None:
+            if self.chkpt_manager is None:
                 ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=self.optimizer, actor=self.actor, encoder=self.encoder, planner=self.planner)
-                self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
+                self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
                 save_path = self.chkpt_manager.save()
             else:
                 save_path = self.chkpt_manager.save()

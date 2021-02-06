@@ -261,7 +261,7 @@ beta_sched = BetaScheduler('linear',
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
-save_inc = 2000
+save_inc = 5000
 prev_grad_norm = np.float('inf')
 
 
