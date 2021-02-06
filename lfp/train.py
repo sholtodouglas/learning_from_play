@@ -153,8 +153,8 @@ class LFPTrainer():
               plan = self.planner([states[:, 0, :], goals[:, 0,:]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal. 
               z_enc = encoding.sample()
               z_plan = plan.sample()
-              z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, dl.window_size, 1))
-              z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, dl.window_size, 1))
+              z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
+              z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
 
               enc_policy = self.actor([states, z_enc_tiled, goals])
               plan_policy = self.actor([states, z_plan_tiled, goals])
@@ -200,22 +200,22 @@ class LFPTrainer():
       if  self.args.gcbc:
           policy = self.actor([states, goals], training=False)
           loss = self.compute_loss(actions, policy, mask, seq_lens)
-          log_action_breakdown(policy, actions, mask, seq_lens, self.args, dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
+          log_action_breakdown(policy, actions, mask, seq_lens, self.args, self.dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
                               self.valid_rotation_loss, self.valid_max_rotation_loss, self.valid_gripper_loss, self.compute_MAE)
       else:
           encoding = self.encoder([states, actions])
           plan = self.planner([states[:, 0, :], goals[:, 0,:]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal. 
           z_enc = encoding.sample()
           z_plan = plan.sample()
-          z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, dl.window_size, 1))
-          z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, dl.window_size, 1))
+          z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
+          z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
           enc_policy = self.actor([states, z_enc_tiled, goals])
           plan_policy = self.actor([states, z_plan_tiled, goals])
           act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
           act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
           reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
           loss = act_plan_loss + reg_loss * beta
-          log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, dl.quaternion_act, self.metrics['valid_position_loss'], \
+          log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                               self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
       if self.args.gcbc:
           return record(loss, self.metrics['valid_loss'])
