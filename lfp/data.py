@@ -196,6 +196,7 @@ class PlayDataloader():
         # State representations
         obs = dataset['obs']
         
+        
         # act in joint space
         if self.joints:
             obs = tf.concat([obs,dataset['joint_poses'][:,:7]], axis=-1)
@@ -254,13 +255,18 @@ class PlayDataloader():
             sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
             sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
         
-        return {'obs':obs, 
+        return_dict = {'obs':obs, 
                 'acts':acts, 
                 'goals':goals, 
                 'seq_lens': tf.cast(seq_len, tf.float32), 
                 'masks':mask, 
                 'dataset_path':dataset['sequence_id'], 
                 'tstep_idxs':dataset['sequence_index']}
+
+        if self.include_imgs:
+            return_dict['imgs'] = dataset['img']
+
+        return return_dict
     
     # TODO: why did we not need this before?? window_lambda is being weird
     # @tf.autograph.experimental.do_not_convert
