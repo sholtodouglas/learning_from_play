@@ -13,7 +13,7 @@ pp = pprint.PrettyPrinter(indent=4)
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_image(image_data):
     image = tf.image.decode_jpeg(image_data, channels=3)
-    image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
+    #image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
     image = tf.reshape(image, [200,200, 3]) # explicit size needed for TPU
     return image
 
