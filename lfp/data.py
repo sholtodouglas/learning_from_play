@@ -269,7 +269,7 @@ class PlayDataloader():
             return_dict['imgs'] = dataset['img']
             # Proprioceptive features are xyz, rpy, gripper angle
             return_dict['proprioceptive_features'] = obs[:,:7]
-            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'imgs', seq_len)
+            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'img', seq_len)
 
         # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
