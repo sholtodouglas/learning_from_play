@@ -229,7 +229,7 @@ class PlayDataloader():
         if self.velocity:
             obs = tf.concat([obs, dataset['velocities']], axis=-1)
         if self.gripper_proprioception:
-            obs = tf.concat([obs, dataset['gripper_proprioception']], axis=-1)
+            obs = tf.concat([obs, dataset['proprioception']], axis=-1)
             
         # Variable Seq len
         if self.variable_seqs:
