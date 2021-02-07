@@ -153,7 +153,10 @@ class PlayDataloader():
 
     def create_goal_tensor(self, dataset, tensor='achieved_goals', seq_len=-1):
         ''' Tile final achieved_goal across time dimension '''
-        tile_dims = tf.constant([self.window_size, 1], tf.int32)
+        if tensor == 'img':
+            tile_dims = tf.constant([self.window_size, 1,1,1], tf.int32)
+        else:
+            tile_dims = tf.constant([self.window_size, 1], tf.int32)
         goal = tf.tile(dataset[tensor][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
         return goal
 
