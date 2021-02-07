@@ -232,9 +232,10 @@ class LFPTrainer():
           imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
           B,T,H,W,C = imgs.shape
           imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
-          img_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1])
+          img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1]), tf.reshape(self.cnn(goal_imgs), [B,T,-1]) 
+
           states = tf.concat([img_embeddings, proprioceptive_features], -1) # gets both the image and it's own xyz ori and angle as pose
-          goals = tf.reshape(self.cnn(goal_imgs), [B,T,-1]) # should be B,T, embed_size
+          goals = goal_embeddings# should be B,T, embed_size
 
       if  self.args.gcbc:
           policy = self.actor([states, goals], training=False)
