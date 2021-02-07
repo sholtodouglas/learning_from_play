@@ -116,6 +116,7 @@ class PlayDataloader():
                 min_window_size=20,
                 window_shift=1,
                 variable_seqs=True, 
+                include_imgs=False, 
                 num_workers=tf.data.experimental.AUTOTUNE,
                 seed=42):
         
@@ -132,6 +133,7 @@ class PlayDataloader():
         self.min_window_size = min_window_size
         self.window_shift = window_shift
         self.variable_seqs = variable_seqs
+        self.include_imgs = include_imgs
         self.shuffle_size = int(batch_size * (window_size / window_shift))
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
@@ -163,7 +165,7 @@ class PlayDataloader():
                                 data=[acts],
                                 name="act_limit_validation")
         
-    def extract(self, paths, include_imgs=False, from_tfrecords=False):
+    def extract(self, paths, from_tfrecords=False):
         """
 
         :param paths:
@@ -175,7 +177,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, include_imgs, ordered=True, num_parallel_reads=1)
+            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_parallel_reads=1)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
