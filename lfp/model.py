@@ -2,13 +2,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization, ReLU, Input, LSTM, Concatenate, Masking, Reshape, Lambda, \
-    Bidirectional, GRU, LayerNormalization, Bidirectional
+    Bidirectional, GRU, LayerNormalization, Bidirectional, Conv2D, MaxPooling2D, Flatten
 from tensorflow.keras.regularizers import l1, l2
 import tensorflow_probability as tfp
 tfd = tfp.distributions
 tfb = tfp.bijectors
 tfpl = tfp.layers
 from lfp.custom_layers import LearnedInitLSTM, LearnedInitGRU
+from tensorflow.keras.layers.experimental.preprocessing import Rescaling
 
 
 def latent_normal(inputs):
@@ -169,3 +170,30 @@ def compute_mmd(x, y):
     y_kernel = compute_kernel(y, y)
     xy_kernel = compute_kernel(x, y)
     return tf.reduce_mean(x_kernel) + tf.reduce_mean(y_kernel) - 2 * tf.reduce_mean(xy_kernel)
+
+
+
+
+def create_vision_network():
+  '''
+  Todo chuck in spatial softmax https://arxiv.org/abs/1504.00702
+  '''
+  return Sequential([
+  Rescaling(1./255, input_shape=(dl.img_size, dl.img_size, 3)), # put it here for portability
+  Conv2D(32, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(32, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(64, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(64, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(128, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(128, 3, padding='same', activation='relu'),
+  MaxPooling2D(),
+  Conv2D(64, 3, padding='same', activation='relu', name='features'),
+  Flatten(),
+  Dense(512, activation='relu'),
+  Dense(256, activation='relu'),  
+], name = 'feature_encoder')
