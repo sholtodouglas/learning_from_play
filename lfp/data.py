@@ -232,7 +232,7 @@ class PlayDataloader():
         if self.variable_seqs:
             seq_len = tf.random.uniform(shape=[], minval=self.min_window_size, 
                                         maxval=self.window_size, dtype=tf.int32, seed=self.seed)
-            goals = self.create_goal_tensor(dataset, seq_len)
+            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
             # Masking
             mask = tf.cast(tf.sequence_mask(seq_len, maxlen=self.window_size), tf.float32) # creates a B*T mask
             multiply_mask = tf.expand_dims(mask, -1)
