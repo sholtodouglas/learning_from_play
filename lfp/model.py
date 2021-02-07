@@ -174,12 +174,12 @@ def compute_mmd(x, y):
 
 
 
-def create_vision_network():
+def create_vision_network(image_height, img_width, embedding_size = 256):
   '''
   Todo chuck in spatial softmax https://arxiv.org/abs/1504.00702
   '''
   return Sequential([
-  Rescaling(1./255, input_shape=(dl.img_size, dl.img_size, 3)), # put it here for portability
+  Rescaling(1./255, input_shape=(image_height, image_width, 3)), # put it here for portability
   Conv2D(32, 3, padding='same', activation='relu'),
   MaxPooling2D(),
   Conv2D(32, 3, padding='same', activation='relu'),
@@ -195,5 +195,5 @@ def create_vision_network():
   Conv2D(64, 3, padding='same', activation='relu', name='features'),
   Flatten(),
   Dense(512, activation='relu'),
-  Dense(256, activation='relu'),  
+  Dense(embedding_size, activation='relu'),  
 ], name = 'feature_encoder')
