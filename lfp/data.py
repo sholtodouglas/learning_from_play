@@ -301,5 +301,7 @@ class PlayDataloader():
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
         self.img_size = dataset.element_spec['imgs'].shape[-2]
+        self.proprioceptive_features_dim = dataset.element_spec['proprioceptive_features'].shape[-1]
+
         pp.pprint(dataset.element_spec)
         return dataset
