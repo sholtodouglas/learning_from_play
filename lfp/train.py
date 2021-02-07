@@ -165,7 +165,15 @@ class LFPTrainer():
           # 2. Reshape imgs to B*T H W C. 
           # 3. Sub in for states and goals.
           # 4. THen there should be no further changes!
-
+          if args.images:
+              imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
+              B,T,H,W,C = imgs.shape
+              imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
+              img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1]), tf.reshape(self.cnn(goal_imgs), [B,T,-1]) 
+              
+              states = tf.concat([img_embeddings, proprioceptive_features], -1) # gets both the image and it's own xyz ori and angle as pose
+              goals = goal_embeddings# should be B,T, embed_size
+        
           if self.args.gcbc:
               distrib = self.actor([states, goals])
               loss = self.compute_loss(actions, distrib, mask, seq_lens)
@@ -219,6 +227,14 @@ class LFPTrainer():
 
   def test_step(self,inputs, beta):
       states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
+      ########################### Between here
+      if args.images:
+        imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
+         B,T,H,W,C = imgs.shape
+         imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
+         img_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1])
+         states = tf.concat([img_embeddings, proprioceptive_features], -1) # gets both the image and it's own xyz ori and angle as pose
+         goals = tf.reshape(self.cnn(goal_imgs), [B,T,-1]) # should be B,T, embed_size
 
       if  self.args.gcbc:
           policy = self.actor([states, goals], training=False)
@@ -234,6 +250,7 @@ class LFPTrainer():
           z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
           enc_policy = self.actor([states, z_enc_tiled, goals])
           plan_policy = self.actor([states, z_plan_tiled, goals])
+          ############### and here could be abstracted into one function
           act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
           act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
           reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
