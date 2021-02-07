@@ -151,10 +151,10 @@ class PlayDataloader():
         minutes = secs // 60 - hours * 60
         print(f"{dataset_size} frames, which is {hours:.0f}hrs {minutes:.0f}m.")
 
-    def create_goal_tensor(self, dataset, seq_len=-1):
+    def create_goal_tensor(self, dataset, tensor='achieved_goals', seq_len=-1):
         ''' Tile final achieved_goal across time dimension '''
         tile_dims = tf.constant([self.window_size, 1], tf.int32)
-        goal = tf.tile(dataset['achieved_goals'][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
+        goal = tf.tile(dataset[tensor][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
         return goal
 
     def validate_action_label(self, acts):
@@ -269,7 +269,9 @@ class PlayDataloader():
             return_dict['imgs'] = dataset['img']
             # Proprioceptive features are xyz, rpy, gripper angle
             return_dict['proprioceptive_features'] = obs[:,:7]
+            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'imgs', seq_len)
 
+        # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
     
     # TODO: why did we not need this before?? window_lambda is being weird

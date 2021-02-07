@@ -72,11 +72,12 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-  def __init__(self, actor, encoder, planner, optimizer, strategy, args, dl, global_batch_size):
+  def __init__(self, actor, encoder, planner, cnn, optimizer, strategy, args, dl, global_batch_size):
 
     self.actor = actor
     self.encoder = encoder
     self.planner = planner
+    self.cnn = cnn
     self.optimizer = optimizer
     self.strategy = strategy 
     self.args = args
@@ -142,12 +143,23 @@ class LFPTrainer():
       reg_loss = tfd.kl_divergence(encoding, plan)  # + KL(plan, encoding)
       return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.global_batch_size)
 
+'''
+{   'acts': TensorSpec(shape=(16, 50, 7), dtype=tf.float32, name=None),
+    'dataset_path': TensorSpec(shape=(16, None), dtype=tf.int32, name=None),
+    'goals': TensorSpec(shape=(16, 50, 11), dtype=tf.float32, name=None),
+    'imgs': TensorSpec(shape=(16, None, 200, 200, 3), dtype=tf.uint8, name=None),
+    'masks': TensorSpec(shape=(16, 50), dtype=tf.float32, name=None),
+    'obs': TensorSpec(shape=(16, 50, 18), dtype=tf.float32, name=None),
+    'proprioceptive_features': TensorSpec(shape=(16, 50, 7), dtype=tf.float32, name=None),
+    'seq_lens': TensorSpec(shape=(16,), dtype=tf.float32, name=None),
+    'tstep_idxs': TensorSpec(shape=(16, None), dtype=tf.int32, name=None)}
+'''
+
 
   def train_step(self, inputs, beta, prev_global_grad_norm):
       with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:  # separate tapes to simplify grad_norm logging and clipping for stability
           # Todo: figure out mask and seq_lens for new dataset 
-          states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], \
-                                                  inputs['masks']
+          states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
 
           if self.args.gcbc:
               distrib = self.actor([states, goals])
