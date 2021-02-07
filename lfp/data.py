@@ -13,6 +13,8 @@ pp = pprint.PrettyPrinter(indent=4)
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_image(image_data):
     image = tf.image.decode_jpeg(image_data, channels=3)
+    # If we don't convert it here, the dataloader is ~4x faster, (911ms for 20 iters vs 3.48s). Anyway better to convert as the first step of encoder? More portable?
+    # Less slicing and dicing of large float matrices this way!
     #image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
     image = tf.reshape(image, [200,200, 3]) # explicit size needed for TPU
     return image
@@ -291,5 +293,6 @@ class PlayDataloader():
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
+        self.img_size = dataset.element_spec['imgs'].shapes[-2]
         pp.pprint(dataset.element_spec)
         return dataset
