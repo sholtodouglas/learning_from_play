@@ -242,7 +242,7 @@ class PlayDataloader():
             acts *= multiply_mask
         else:
             seq_len = self.window_size
-            goals = self.create_goal_tensor(dataset, seq_len)
+            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
           
         # # Key data dimensions
         # self.obs_dim = obs.shape[1]
