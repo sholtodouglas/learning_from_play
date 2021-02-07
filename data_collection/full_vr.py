@@ -112,7 +112,7 @@ def do_command(t,t0):
 
 
 
-def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, proprioception):
+def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception):
     # what do we care about, POS, ORI and GRIPPER?
     state = env.panda.calc_state() 
     #print(p.getEulerFromQuaternion(state['observation'][3:7]))
@@ -130,7 +130,7 @@ def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocit
         state['achieved_goal']), \
     cagb.append(state['controllable_achieved_goal']), joints.append(state['joints']), acts_rpy.append(action_rpy),
     acts_rpy_rel.append(action_rpy_rel), velocities.append(state['velocity']), obs_rpy.append(state['obs_rpy']), 
-    obs_rpy_inc_obj.append(state['obs_rpy_inc_obj']), proprioception.append(state['proprioception'])
+    obs_rpy_inc_obj.append(state['obs_rpy_inc_obj']), gripper_proprioception.append(state['gripper_proprioception'])
 
     
 
@@ -143,14 +143,14 @@ def save_state(env, example_path, counter):
     env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/'+ example_path + '/env_states/' + str(counter) + ".bullet") # ideally this takes roughly the same amount of time
 
 
-def save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, proprioception):
+def save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception):
     print(npz_path)
     if not debugging:
         
         np.savez(npz_path + '/data', acts=acts, obs=obs, achieved_goals=ags, 
         controllable_achieved_goals=cagb, joint_poses=joints, target_poses=targetJoints, acts_rpy=acts_rpy, 
         acts_rpy_rel=acts_rpy_rel, velocities=velocities, obs_rpy=obs_rpy, obs_rpy_inc_obj=obs_rpy_inc_obj, 
-        proprioception=proprioception)
+        gripper_proprioception=gripper_proprioception)
     print('Finito')
 
 env.p.saveBullet(os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet') 
@@ -172,7 +172,7 @@ while(1):
     # reset from init which we created (allows you to press a button on the controller and reset the env)
     env.p.restoreState(fileName = os.path.dirname(os.path.abspath(__file__)) + '/init_state.bullet')
     
-    acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, proprioception = [], [], [], [], [], [], [], [],[], [], [], []
+    acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception = [], [], [], [], [], [], [], [],[], [], [], []
     try:
         
         while(1):
@@ -190,7 +190,7 @@ while(1):
                         thread = threading.Thread(target = save_state, name = str(counter), args = (env, example_path, counter))
                         thread.start()
                     
-                save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, proprioception)
+                save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception)
                 target = do_command(t,t0)
                 targetJoints.append(target)
                 
@@ -198,7 +198,7 @@ while(1):
                 counter += 1
 
             if BUTTON == 1:
-                save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, proprioception)
+                save(npz_path, acts, obs, ags, cagb, joints, targetJoints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception)
                 BUTTON = 0 
                 break
 

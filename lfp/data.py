@@ -31,7 +31,7 @@ def read_tfrecord(include_imgs=False):
                 'acts_rpy_rel': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
                 'velocities': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
                 'obs_quat': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                'proprioception': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                'gripper_proprioception': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
                 'sequence_index': tf.io.FixedLenFeature([], tf.int64),
                 'sequence_id': tf.io.FixedLenFeature([], tf.int64),
         }
@@ -50,7 +50,7 @@ def read_tfrecord(include_imgs=False):
         output['acts_rpy_rel'] = tf.ensure_shape(tf.io.parse_tensor(data['acts_rpy_rel'], tf.float32), (7,))
         output['velocities'] = tf.ensure_shape(tf.io.parse_tensor(data['velocities'], tf.float32), (6,))
         output['obs_quat'] = tf.ensure_shape(tf.io.parse_tensor(data['obs_quat'], tf.float32), (19,))
-        output['proprioception'] = tf.ensure_shape(tf.io.parse_tensor(data['proprioception'], tf.float32), (1,))
+        output['gripper_proprioception'] = tf.ensure_shape(tf.io.parse_tensor(data['gripper_proprioception'], tf.float32), (1,))
         output['sequence_index'] = tf.cast(data['sequence_index'], tf.int32)
         output['sequence_id'] = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
         if include_imgs:
@@ -61,7 +61,7 @@ def read_tfrecord(include_imgs=False):
 
 def extract_npz(paths):
     keys = ['obs', 'acts', 'achieved_goals', 'joint_poses', 'target_poses', 'acts_quat', 'acts_rpy_rel',
-            'velocities', 'obs_quat', 'proprioception']
+            'velocities', 'obs_quat', 'gripper_proprioception']
     dataset = {k: [] for k in keys + ['sequence_index', 'sequence_id']}
 
     for path in paths:
@@ -112,7 +112,7 @@ class PlayDataloader():
                 joints=False,
                 velocity=False,
                 normalize=False,
-                proprioception=False,
+                gripper_proprioception=False,
                 batch_size=32,
                 window_size=50,
                 min_window_size=20,
@@ -128,7 +128,7 @@ class PlayDataloader():
         self.joints = joints
         self.velocity = velocity
         self.normalize = normalize
-        self.proprioception = proprioception
+        self.gripper_proprioception = gripper_proprioception
         
         self.batch_size = batch_size
         self.window_size = window_size
@@ -225,8 +225,8 @@ class PlayDataloader():
             obs = np.diff(obs, axis=0)
         if self.velocity:
             obs = tf.concat([obs, dataset['velocities']], axis=-1)
-        if self.proprioception:
-            obs = tf.concat([obs, dataset['proprioception']], axis=-1)
+        if self.gripper_proprioception:
+            obs = tf.concat([obs, dataset['gripper_proprioception']], axis=-1)
             
         # Variable Seq len
         if self.variable_seqs:
@@ -267,6 +267,8 @@ class PlayDataloader():
 
         if self.include_imgs:
             return_dict['imgs'] = dataset['img']
+            # Proprioceptive features are xyz, rpy, gripper angle
+            return_dict['proprioceptive_features'] = obs[:,:7]
 
         return return_dict
     
