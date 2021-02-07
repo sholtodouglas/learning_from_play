@@ -264,7 +264,7 @@ class PlayDataloader():
                 'tstep_idxs':dataset['sequence_index']}
 
         if self.include_imgs:
-            return_dict['imgs'] = tf.squeeze(dataset['img'])
+            return_dict['imgs'] = dataset['img']
 
         return return_dict
     
