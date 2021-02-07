@@ -293,6 +293,6 @@ class PlayDataloader():
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
-        self.img_size = dataset.element_spec['imgs'].shapes[-2]
+        self.img_size = dataset.element_spec['imgs'].shape[-2]
         pp.pprint(dataset.element_spec)
         return dataset
