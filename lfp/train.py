@@ -165,7 +165,7 @@ class LFPTrainer():
           # 2. Reshape imgs to B*T H W C. 
           # 3. Sub in for states and goals.
           # 4. THen there should be no further changes!
-          if args.images:
+          if self.args.images:
               imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
               B,T,H,W,C = imgs.shape
               imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
@@ -228,7 +228,7 @@ class LFPTrainer():
   def test_step(self,inputs, beta):
       states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
       ########################### Between here
-      if args.images:
+      if self.args.images:
           imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
           B,T,H,W,C = imgs.shape
           imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
