@@ -85,11 +85,10 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-
 <!-- ![Demo](media/demo.png) -->
 <p align="center">
-	<a href="https://github.com/sholtodouglas/learning_from_play/media/demo.png">
-		<img src="media/demo.png" width="400" height="400">
+	<a href="https://sholtodouglas.github.io/images/play/with_latent4.gif">
+		<img src="media/with_latent4.gif">
 	</a>
 </p>
 
