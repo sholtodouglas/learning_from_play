@@ -88,7 +88,7 @@
 <!-- ![Demo](media/demo.png) -->
 <p align="center">
 	<a href="https://sholtodouglas.github.io/images/play/with_latent4.gif">
-		<img src="media/demo.png" width="400" height="400">
+		<img src="https://sholtodouglas.github.io/images/play/with_latent4.gif" width="400" height="400">
 	</a>
 </p>
 
