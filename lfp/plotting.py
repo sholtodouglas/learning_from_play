@@ -105,12 +105,12 @@ def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
 
     return np.array(obs), np.array(acts), np.array(goals), labels, colors, paths
 
-def project_labelled_latents(reducer, z_enc, colors, bucket=True):
-    reducer.fit(z_enc)
-    z_enc_embed = reducer.transform(z_enc)
+def project_labelled_latents(z_embed, colors, bucket=True):
+    
     fig = plt.figure(figsize=(14,14))
     ax = fig.add_subplot(111)
-    scatter = ax.scatter(z_enc_embed[:, 0], z_enc_embed[:, 1], s=60, label='z_enc', c = colors)
+    print(z_embed)
+    scatter = ax.scatter(z_embed[:, 0], z_embed[:, 1], s=60, label='z_embed', c = colors)
     ax.set_aspect('equal', 'datalim')
     ax.legend(loc='upper left')
     #plt.axis('off')
@@ -134,10 +134,19 @@ def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take):
     acts = np.concatenate([acts, batch_acts])
     goals = np.concatenate([goals, batch_goals])
     initial_state = obs[:, 0, :]
-    z_enc = encoder((obs,acts))
-    z_plan = planner((initial_state, goals))
-    fig_enc, scatter = project_labelled_latents(reducer, z_enc.sample(), colors + batch_colors, bucket)
-    fig_plan, scatter = project_labelled_latents(reducer, z_plan.sample(), colors + batch_colors, bucket)
+    z_enc = encoder((obs,acts)).sample()
+    z_plan = planner((initial_state, goals)).sample()
+    z_combined = tf.concat([z_enc, z_plan], axis = 0)
+  
+    reducer.fit(z_combined)
+    l = len(z_enc)
+    z_embed = reducer.transform(z_combined)
+
+    z_enc = z_embed[:l]
+    z_plan = z_embed[l:]
+
+    fig_enc, scatter = project_labelled_latents(z_enc, colors + batch_colors, bucket)
+    fig_plan, scatter = project_labelled_latents(z_plan, colors + batch_colors, bucket)
     
     return fig_enc, fig_plan
 
