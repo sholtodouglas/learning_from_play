@@ -200,7 +200,7 @@ class PlayDataloader():
 
         # State representations
         obs = dataset['obs']
-        
+
         
         # act in joint space
         if self.joints:
@@ -270,9 +270,16 @@ class PlayDataloader():
 
         if self.include_imgs:
             return_dict['imgs'] = dataset['img']
+            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'img', seq_len)
+            if self.variable_seqs:
+                # Here is a nice micro optimisation - by keeping imgs int in the dataloader we make our calls to dataloader 3x faster
+                # and can keep the /255 step in the cnn intself, which removes a source of error in deployment of the model
+                imgs_mask = tf.cast(multiply_mask, tf.uint8)[:,:,tf.newaxis, tf.newaxis] # Must be 4 dim because the imgs are T, H, W, C
+                return_dict['imgs'] *= imgs_mask
+                return_dict['goal_imgs'] *= imgs_mask
             # Proprioceptive features are xyz, rpy, gripper angle
             return_dict['proprioceptive_features'] = obs[:,:7]
-            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'img', seq_len)
+            
 
         # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
@@ -300,8 +307,9 @@ class PlayDataloader():
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
         self.act_dim = dataset.element_spec['acts'].shape[-1]
-        self.img_size = dataset.element_spec['imgs'].shape[-2]
-        self.proprioceptive_features_dim = dataset.element_spec['proprioceptive_features'].shape[-1]
+        if self.include_imgs:
+            self.img_size = dataset.element_spec['imgs'].shape[-2]
+            self.proprioceptive_features_dim = dataset.element_spec['proprioceptive_features'].shape[-1]
 
         pp.pprint(dataset.element_spec)
         return dataset
