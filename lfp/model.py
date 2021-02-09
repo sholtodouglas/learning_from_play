@@ -25,35 +25,33 @@ def logistic_mixture(inputs, qbits=None):
     :param qbits: number of quantisation bits, total quantisation intervals = 2 ** qbits
     :return:
     """
-    def logistic_mixture_lambda():
-        weightings, mu, scale = inputs
-        if qbits is not None:
-            dist = tfd.Logistic(loc=mu, scale=scale)
-            dist = tfd.QuantizedDistribution(
-                distribution=tfd.TransformedDistribution(
-                    distribution=dist,
-                    bijector=tfb.Shift(shift=-0.5)),
-                low=-2 ** qbits / 2.,
-                high=2 ** qbits / 2.,
-            )
-        else:
-            dist = tfd.Logistic(loc=mu, scale=scale)
+    weightings, mu, scale = inputs
+    if qbits is not None:
+        dist = tfd.Logistic(loc=mu, scale=scale)
+        dist = tfd.QuantizedDistribution(
+            distribution=tfd.TransformedDistribution(
+                distribution=dist,
+                bijector=tfb.Shift(shift=-0.5)),
+            low=-2 ** qbits / 2.,
+            high=2 ** qbits / 2.,
+        )
+    else:
+        dist = tfd.Logistic(loc=mu, scale=scale)
 
-        mixture_dist = tfd.MixtureSameFamily(
+    mixture_dist = tfd.MixtureSameFamily(
             mixture_distribution=tfd.Categorical(logits=weightings),
             components_distribution=dist,
             validate_args=True
+    )
+
+    if qbits is not None:
+        action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
+        mixture_dist = tfd.TransformedDistribution(
+            distribution=mixture_dist,
+            bijector=tfb.Scale(scale=action_limits / (2 ** qbits / 2.)) # scale to action limits
         )
 
-        if qbits is not None:
-            action_limits = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
-            mixture_dist = tfd.TransformedDistribution(
-                distribution=mixture_dist,
-                bijector=tfb.Scale(scale=action_limits / (2 ** qbits / 2.)) # scale to action limits
-            )
-
-        return mixture_dist
-    return logistic_mixture_lambda
+    return mixture_dist
 
 
 def create_actor(obs_dim, act_dim, goal_dim,
@@ -94,7 +92,7 @@ def create_actor(obs_dim, act_dim, goal_dim,
         mu = Reshape((-1, act_dim, num_distribs))(mu)
         scale = Reshape((-1, act_dim, num_distribs))(scale)
 
-        actions = tfpl.DistributionLambda(logistic_mixture(qbits=qbits), name='logistic_mix')([weightings, mu, scale])
+        actions = tfpl.DistributionLambda(logistic_mixture, name='logistic_mix')([weightings, mu, scale], qbits)
     else:
         actions = Dense(act_dim, activation=None, name='acts')(x)
 
