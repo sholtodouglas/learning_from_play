@@ -109,7 +109,6 @@ def project_labelled_latents(z_embed, colors, bucket=True):
     
     fig = plt.figure(figsize=(14,14))
     ax = fig.add_subplot(111)
-    print(z_embed)
     scatter = ax.scatter(z_embed[:, 0], z_embed[:, 1], s=60, label='z_embed', c = colors)
     ax.set_aspect('equal', 'datalim')
     ax.legend(loc='upper left')
