@@ -9,8 +9,6 @@ from tensorflow.keras.utils import Progbar
 from tensorflow.distribute import ReduceOp
 import tensorflow_probability as tfp
 tfd = tfp.distributions
-import tensorflow_addons as tfa
-from tensorflow_addons.optimizers import AdamW
 import lfp
 import os
 import wandb
@@ -210,8 +208,6 @@ class LFPTrainer():
                                   lambda: tf.clip_by_global_norm(gradients, prev_global_grad_norm)[0],
                                   lambda: gradients)  # must get[0] as it returns new norm as [1]
 
-              planner_gradients = [g * 10 for g in planner_gradients]
-
               actor_norm_clipped = record(tf.linalg.global_norm(actor_gradients), self.metrics['actor_grad_norm_clipped'])
               encoder_norm_clipped = record(tf.linalg.global_norm(encoder_gradients), self.metrics['encoder_grad_norm_clipped'])
               planner_norm_clipped = record(tf.linalg.global_norm(planner_gradients), self.metrics['planner_grad_norm_clipped'])
@@ -307,17 +303,29 @@ class LFPTrainer():
             if not self.args.gcbc:
                 self.encoder.save_weights(f'{path}/encoder.h5')
                 self.planner.save_weights(f'{path}/planner.h5')
+            if self.args.images:
+                self.cnn.save_weights(f'{path}/cnn.h5')
 
             os.makedirs(path+'/optimizers', exist_ok=True)
             np.save(f'{path}/optimizers/optimizer.npy', self.optimizer.get_weights(), allow_pickle=True)
 
 
-  def load_weights(self, path, with_optimizer=False, step=""):
-      # TODO: Load from CKPT
+  def load_weights(self, path, with_optimizer=False, step="", from_checkpoint=False):
+      # With checkpoint
+      if self.from_checkpoint or self.data_source == 'GCS':
+          ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=self.optimizer, actor=self.actor, encoder=self.encoder, planner=self.planner)
+          if self.args.images:
+              ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=self.optimizer, actor=self.actor, encoder=self.encoder, planner=self.planner, cnn=self.cnn)
+          self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
+          ckpt.restore(tf.train.latest_checkpoint(path))
+
+    # Without checkpointing, because it was created on GDRIVE
       self.actor.load_weights(f'{path}/actor.h5')
       if not self.args.gcbc:
           self.encoder.load_weights(f'{path}/encoder.h5')
           self.planner.load_weights(f'{path}/planner.h5')
+      if self.args.images:
+                self.cnn.load_weights(f'{path}/cnn.h5')
           
       if with_optimizer:
           #self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
