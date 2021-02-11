@@ -25,6 +25,7 @@ parser.add_argument('-b', '--batch_size', default=512, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
 parser.add_argument('-lp', '--planner_layer_size', default=512, type=int, help='Layer size of planner, increases size of neural net')
+parser.add_argument('-embd', '--img_embedding_size', default=256, type=int, help='Embedding size of features,goal space')
 parser.add_argument('-z', '--latent_dim', default=256, type=int, help='Size of the VAE latent space')
 parser.add_argument('-g', '--gcbc', default=False, action='store_true', help='Enables GCBC, a simpler model with no encoder/planner')
 parser.add_argument('-n', '--num_distribs', default=None, type=int, help='Number of distributions to use in logistic mixture model')
@@ -33,9 +34,10 @@ parser.add_argument('-lr', '--learning_rate', type=float, default=3e-4)
 parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
+parser.add_argument('-i', '--images', default=False, action='store_true')
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
-parser.add_argument('--tpu_name', help='GCP TPU name')
+parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
 
 args = parser.parse_args()
 
@@ -114,6 +116,8 @@ if args.data_source == 'DRIVE':
     print('Reading data from Google Drive')
     STORAGE_PATH = Path('/content/drive/My Drive/Robotic Learning')
 elif args.data_source == 'GCS':
+    if args.colab:
+      auth.authenticate_user()
     print('Reading data from Google Cloud Storage')
     r = requests.get('https://ipinfo.io')
     region = r.json()['region']
@@ -176,9 +180,14 @@ else:
 # In[48]:
 
 
-GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
+if args.images:
+  GLOBAL_BATCH_SIZE = 128
+  shuffle_size = GLOBAL_BATCH_SIZE*5
+else:
+  GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
+  shuffle_size = None # allow the dl to set it
 
-dl = lfp.data.PlayDataloader(batch_size=GLOBAL_BATCH_SIZE)
+dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE, shuffle_size = shuffle_size)
 # In[49]:
 
 
@@ -205,8 +214,8 @@ valid_dataset = dl.load(valid_data)
 from lfp.train import LFPTrainer
 
 def train_setup():
-    model_params = {'obs_dim':dl.obs_dim,
-                'goal_dim':dl.goal_dim,
+    model_params = {'obs_dim':args.img_embedding_size + dl.proprioceptive_features_dim if args.images else dl.obs_dim,
+                'goal_dim':args.img_embedding_size if args.images else dl.goal_dim,
                 'act_dim':dl.act_dim,
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
@@ -222,8 +231,13 @@ def train_setup():
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
 
+    if args.images:
+      cnn = lfp.model.create_vision_network(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
+    else:
+      cnn = None
+
     optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
-    trainer = LFPTrainer(actor, encoder, planner, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+    trainer = LFPTrainer(actor, encoder, planner, cnn, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, trainer
 
 if args.device=='CPU' or args.device=='GPU':
