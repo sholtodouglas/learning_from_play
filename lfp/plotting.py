@@ -122,6 +122,7 @@ def project_labelled_latents(z_embed, colors, bucket=True):
       del colors_dict[i]
     markers = [plt.Line2D([0,0],[0,0],color=color, marker='o', linestyle='') for color in colors_dict.values()]
     plt.legend(markers, colors_dict.keys(), numpoints=1)
+    plt.axis('off')
     return fig,scatter
 
 
