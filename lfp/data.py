@@ -118,7 +118,8 @@ class PlayDataloader():
                 min_window_size=20,
                 window_shift=1,
                 variable_seqs=True, 
-                include_imgs=False, 
+                include_imgs=False,
+                shuffle_size=None, 
                 num_workers=tf.data.experimental.AUTOTUNE,
                 seed=42):
         
@@ -136,7 +137,7 @@ class PlayDataloader():
         self.window_shift = window_shift
         self.variable_seqs = variable_seqs
         self.include_imgs = include_imgs
-        self.shuffle_size = int(batch_size * (window_size / window_shift))
+        self.shuffle_size = int(batch_size * (window_size / window_shift)) if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
         self.seed = seed
