@@ -23,6 +23,11 @@ def load_weights(path, actor, encoder=None, planner=None, cnn=None, step=""):
         if cnn is not None: cnn.load_weights(f'{path}/cnn'+step+'.h5')
 
 
+def build_cnn(cnn):
+    x = tf.zeros((1, cnn.img_height, cnn.img_width, cnn.img_channels))
+    cnn(x)
+
+
 def load_env(JOINTS = False, QUAT=False, RELATIVE=False, arm='UR5'):
 
     if arm == 'UR5':
