@@ -184,7 +184,7 @@ else:
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
 
 
-dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE, shuffle_size = shuffle_size)
+dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE)
 # In[49]:
 
 
