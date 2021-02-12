@@ -1,135 +1,135 @@
 import numpy as np
-from tensorflow.keras.utils import Progbar
+import tensorflow as tf
+import pybullet as p
+'''
+A set of functions which test various elements of the pybullet state space for success
+'''
+
+def compare_xyz(g, ag, limits = np.array([0.05, 0.05, 0.05])):
+    if (abs(g-ag) > limits).any():
+        #print('Failed xyz')
+        return False
+    else:
+        return True
+    
+    
+def compare_RPY(g, ag, limits = np.array([np.pi/4,np.pi/4,np.pi/4])):
+    g = np.array(p.getEulerFromQuaternion(g))
+    ag = np.array(p.getEulerFromQuaternion(ag))
+    if (abs(g-ag) > limits).any():
+        #print('Failed rpy')
+        return False
+    else:
+        return True
+    
+def compare_drawer(g, ag, limit=0.025):
+    if abs(g-ag) > limit:
+        #print('Failed drawer')
+        return False
+    else:
+        return True
+    
+def compare_door(g, ag, limit=0.03):
+    if abs(g-ag) > 0.04:
+        #print('Failed door', g, ag)
+        return False
+    else:
+        return True
+    
+    
+def compare_button(g, ag, limit=0.01):
+    if abs(g-ag) >limit: 
+        #print('Failed button', g , ag)
+        return False
+    else:
+        return True
+    
+def compare_dial(g,ag, limit=0.3):
+    if abs(g-ag) > limit:
+        #print('Failed dial')
+        return False
+    else:
+        return True
+    
+    
+def success_func(g, ag):
+    g,ag = np.squeeze(g), np.squeeze(ag)
+    if compare_xyz(g[0:3], ag[0:3]) and compare_RPY(g[3:7], ag[3:7]) and compare_drawer(g[7], ag[7]) and compare_door(g[8], ag[8]) and compare_dial(g[10], ag[10]) and compare_button(g[9], ag[9]):
+        return True
+    else:
+        return False
+
+
+block = [0,3]
+qqqq = [3,7]
+drawer = 7
+door = 8
+button = 9
+dial = 10
 
 door_positions = {'left': -0.15, 'middle': 0.0, 'right': 0.15}
-drawer_positions = {'closed': 0.075, 'middle': 0.035, 'open': 0.00}
-button_positions = {'open': 0.029, 'closed': 0.029}
-dial_positions = {'default':0}
-obj_poses = {'default': [0,0.2,0.0], 'shelf':[0,0.43, 0.27], 'left':[-0.2, 0.2,0.0], 'right':[0.2,0.2,0.0],'closed_drawer': [-0.15, 0.1, -0.09], 'open_drawer':[-0.15, -0.15, -0.09], 'cupboard_left': [-0.2, 0.45, 0.0], 'cupboard_right':[0.2, 0.45, 0.0]}
-obj_oris = {'upright': [0,0.7,0,0.7], 'default':[0,0,0,1], 'lengthways':[0.0, 0.0, 0.7071, 0.7071]}
+
+drawer_positions = {'closed': 0.075, 'middle': 0.035, 'open': -0.05}
+
+button_positions = {'open': 0.029, 'closed': -0.029}
+
+dial_positions = {'one':0, 'default': 0.35, 'two': 0.8}
+
+obj_poses = {'default': [0,0.1,0.0], 'shelf':[0,0.43, 0.27],
+             'left':[-0.2, 0.2,0.0], 'right':[0.2,0.2,0.0],
+             'closed_drawer': [-0.15, 0.1, -0.07], 
+             'open_drawer':[-0.15, -0.1, -0.07], 
+             'cupboard_left': [-0.2, 0.45, 0.0], 
+             'cupboard_right':[0.2, 0.45, 0.0]}
+
+obj_oris = {'upright': [0, -0.7,0,0.7], 'default':[0.0, 0.0, 0.7071, 0.7071], 
+            'lengthways':[0,0,0,1]}
+
+class tester():
+
+    def __init__(self, env):
+        self.env = env
+
+    def current_ag(self):
+        return self.env.panda.calc_state()['achieved_goal']
+
+    def make_goal(self, obj, pos=None, ori=None):
+        '''
+        Ori only applies for the block
+        '''
+        g = self.current_ag()
+        if isinstance(obj,list):
+            if pos is not None:
+                g[block[0]:block[1]] = np.array(pos)
+            if ori is not None:
+                g[qqqq[0]:qqqq[1]] = np.array(obj_oris[ori])
+                if ori == 'upright' and pos is not None:
+                    g[2] += 0.025
+                
+        else:
+            g[obj] = pos
+            
+        return tf.expand_dims(tf.expand_dims(g,0),0)
 
 
-def test_suite_reset(env, obj_ori = 'default', obj_pos = 'default', door = 'middle', drawer = 'open', button = 'open', dial = 'default'):
-    env.reset()
-    obj_offset = np.array([0.,0.,0.])
-    if  obj_ori == 'upright':
-        obj_offset += np.array([0,0.,0.025])
-        
-    positions = [drawer_positions[drawer], door_positions[door], button_positions[button], dial_positions[dial]]
-             
-    for idx, j in enumerate(env.panda.joints):
-        env.panda.bullet_client.resetJointState(j, 0, positions[idx]) # reset drawer, button etc
-        
-    env.panda.bullet_client.resetBasePositionAndOrientation(env.panda.objects[0],
-                                                            np.array(obj_poses[obj_pos])+obj_offset, obj_oris[obj_ori])
-    
-    
-    
-def define_goal(env,obj_ori = 'default', obj_pos = 'default', door = 'middle', drawer = 'open', button = 'open', dial = 'default'):
-    # We know the goal is 
-    # objpos (3), obj_ori(4), door, drawer, button, dial
-    obj_offset = np.array([0.,0.,0.])
-    if  obj_ori == 'upright':
-        obj_offset += np.array([0,0.,0.025])
-    
-    goal = list(np.array(obj_poses[obj_pos])+obj_offset)+list(obj_oris[obj_ori])+[drawer_positions[drawer], door_positions[door],button_positions[button],dial_positions[dial]]
-    
-    return np.array(goal).astype(np.float32)
-
-def measure_progress(initial_ag, final_ag, end_goal):
-    progbar = Progbar(1, verbose=1, interval=0.05)
-    initial_distance = abs(end_goal - initial_ag)
-    final_distance = abs(end_goal - final_ag)
-    progress = 1- (np.mean(final_distance) / np.mean(initial_distance))
-    progbar.add(progress, [('L1', np.mean(final_distance))])
-
-def door_left(env):
-    test_suite_reset(env, door = 'right')
-    return define_goal(env, door = 'left')
-
-def door_right(env):
-    test_suite_reset(env, door = 'left')
-    return define_goal(env, door = 'right')
-
-def open_drawer(env):
-    test_suite_reset(env, drawer='closed')
-    return define_goal(env, drawer = 'open')
-
-def close_drawer(env):
-    test_suite_reset(env, drawer='open')
-    return define_goal(env, drawer = 'closed')
-
-def push_left(env):
-    test_suite_reset(env, obj_ori='lengthways')
-    return define_goal(env, obj_ori='lengthways', obj_pos='left')
-
-def push_right(env):
-    test_suite_reset(env, obj_ori='lengthways')
-    return define_goal(env, obj_ori='lengthways', obj_pos='right')
-
-def block_in_cupboard_right(env):
-    test_suite_reset(env, door='left')
-    return define_goal(env, door = 'left', obj_pos='cupboard_right')
-
-def block_in_cupboard_left(env):
-    test_suite_reset(env, door='right')
-    return define_goal(env, door = 'right', obj_pos='cupboard_left')
-
-def block_in_cupboard_right_upright(env):
-    test_suite_reset(env, door='left', obj_ori='upright')
-    return define_goal(env, door = 'left', obj_pos='cupboard_right', obj_ori='upright')
-
-def block_in_cupboard_left_upright(env):
-    test_suite_reset(env, door='right', obj_ori='upright')
-    return define_goal(env, door = 'right', obj_pos='cupboard_left', obj_ori='upright')
-
-def block_default_to_upright(env):
-    test_suite_reset(env, obj_ori='default')
-    return define_goal(env, obj_ori='upright')
-
-def block_lengthways_to_upright(env):
-    test_suite_reset(env, obj_ori='lengthways')
-    return define_goal(env, obj_ori='upright')
-
-def block_default_to_lengthways(env):
-    test_suite_reset(env, obj_ori='default')
-    return define_goal(env, obj_ori='lengthways')
-
-def block_lengthways_to_default(env):
-    test_suite_reset(env, obj_ori='lengthways')
-    return define_goal(env, obj_ori='default')
-
-def press_button(env):
-    test_suite_reset(env, door='right')
-    return define_goal(env, door='right', button='closed')
-
-def block_on_shelf(env):
-    test_suite_reset(env, obj_ori='upright')
-    return define_goal(env, obj_pos='shelf',obj_ori='upright')
-
-def block_in_open_drawer(env):
-    test_suite_reset(env, drawer='open')
-    return define_goal(env, drawer='open', obj_pos='open_drawer')
-
-def block_in_open_drawer_lengthways(env):
-    test_suite_reset(env, drawer='open', obj_ori='lengthways')
-    return define_goal(env, drawer='open', obj_ori='lengthways', obj_pos='open_drawer')
-
-# Multi part objectives
-def press_button_with_door_obstacle(env):
-    test_suite_reset(env, door='left')
-    return define_goal(env, door='right', button='closed')
-
-def block_in_drawer_and_close(env):
-    test_suite_reset(env, drawer='open', obj_ori='lengthways')
-    return define_goal(env, drawer='closed', obj_ori='lengthways', obj_pos='closed_drawer')
-
-#now, how to measure success?
-
-test_list = [door_left,door_right,open_drawer,close_drawer,push_left,push_right,block_in_cupboard_right,
-         block_in_cupboard_left,block_in_cupboard_right_upright, block_in_cupboard_left_upright, block_default_to_upright,
-         block_lengthways_to_upright, block_default_to_lengthways, block_lengthways_to_default, press_button,block_on_shelf,
-         block_in_open_drawer,block_in_open_drawer_lengthways,
-         press_button_with_door_obstacle,block_in_drawer_and_close]
 
 
+tasks = {
+    'block_left': (block, obj_poses['left'], 'default'),
+    'block_right': (block, obj_poses['right'], 'default'),
+    'block_shelf': (block, obj_poses['shelf'], 'default'),
+    'block_cupboard_right': (block, obj_poses['cupboard_right'], 'default'),
+    'block_cupboard_left': (block, obj_poses['cupboard_left'], 'default'),
+    'block_drawer':  (block, obj_poses['open_drawer'], 'lengthways'),
+    'block_upright': (block,obj_poses['default'], 'upright'),
+    'block_lengthways': (block, obj_poses['default'], 'lengthways'),
+    'block_lengthways_left': (block, obj_poses['left'], 'lengthways'),
+    'block_ori_default': (block, obj_poses['default'], 'default'),
+    'button': (button, button_positions['closed']),
+    'door_left': (door, door_positions['left']),
+    'door_right': (door, door_positions['right']),
+    'open_drawer': (drawer, drawer_positions['open']),
+    'close_drawer': (drawer, drawer_positions['closed']),
+    'dial_on': (dial, dial_positions['one']),
+    'dial_off': (dial, dial_positions['two']),
+}
