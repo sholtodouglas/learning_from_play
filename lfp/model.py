@@ -171,11 +171,9 @@ def compute_mmd(x, y):
 
 
 
-
+# Standard CNN boi
 def create_vision_network(img_height, img_width, embedding_size = 256):
-  '''
-  Todo chuck in spatial softmax https://arxiv.org/abs/1504.00702
-  '''
+
   return Sequential([
   Rescaling(1./255, input_shape=(img_height, img_width, 3)), # put it here for portability
   Conv2D(32, 3, padding='same', activation='relu'),
@@ -193,5 +191,41 @@ def create_vision_network(img_height, img_width, embedding_size = 256):
   Conv2D(64, 3, padding='same', activation='relu', name='features'),
   Flatten(),
   Dense(512, activation='relu'),
-  Dense(embedding_size, activation='relu'),  
+  Dense(embedding_size),  
 ], name = 'feature_encoder')
+
+# Has a cheeky 20M params but ok. This is the option which uses spatial softmax. 
+class cnn(tf.keras.Model):
+
+    def __init__(self,  img_height=200, img_width = 200, img_channels=3, embedding_size=64):
+        super(cnn, self).__init__()
+        self.img_height = img_height
+        self.img_width = img_width
+        self.img_channels = img_channels
+        self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
+        self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu')
+        self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu')
+        self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu')
+        # In between these, do a spatial softmax
+        self.flatten = Flatten()
+        self.dense1 = Dense(512, activation='relu')
+        self.dense2 = Dense(64)
+        
+    def call(self, inputs):
+        x = self.rescaling(inputs)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        pre_softmax = self.conv3(x)
+        
+        # Assume features is of size [N, H, W, C] (batch_size, height, width, channels).
+        # Transpose it to [N, C, H, W], then reshape to [N * C, H * W] to compute softmax
+        # jointly over the image dimensions. 
+        N, H, W, C = pre_softmax.shape
+        x = tf.reshape(tf.transpose(x, [0, 3, 1, 2]), [N * C, H * W])
+        softmax = tf.nn.softmax(x)
+        # Reshape and transpose back to original format.
+        softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1])
+        x = self.flatten(softmax)
+        x = self.dense1(x)
+        return self.dense2(x)
+    
