@@ -220,7 +220,7 @@ def train_setup():
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
     
-    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs)
+    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
     if args.gcbc:
         encoder = None
