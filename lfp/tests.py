@@ -1,6 +1,9 @@
 import numpy as np
 import tensorflow as tf
-import pybullet as p
+try:
+    import pybullet as p
+except:
+    print('No pybullet installation found - which is fine if training')
 '''
 A set of functions which test various elements of the pybullet state space for success
 '''
