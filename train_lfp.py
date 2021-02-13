@@ -336,7 +336,7 @@ while t < args.train_steps:
           
     if t % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-        if not args.gcbc or args.images:
+        if not args.gcbc and not args.images:
           z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
           #Comet
