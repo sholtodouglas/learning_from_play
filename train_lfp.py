@@ -23,7 +23,7 @@ parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_tru
 parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=512, type=int)
 parser.add_argument('-wmax', '--window_size_max', default=50, type=int)
-parser.add_argument('-min', '--window_size_min', default=20, type=int)
+parser.add_argument('-wmin', '--window_size_min', default=20, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
 parser.add_argument('-lp', '--planner_layer_size', default=512, type=int, help='Layer size of planner, increases size of neural net')
