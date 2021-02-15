@@ -70,7 +70,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, strategy=None, global_batch_size=32):
+    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, optimizer=Adam(), strategy=None, global_batch_size=32):
 
         self.actor = actor
         self.encoder = encoder
@@ -80,6 +80,11 @@ class LFPTrainer():
         self.args = args
         self.dl = dl
         self.global_batch_size = global_batch_size
+
+        self.actor_optimizer = optimizer
+        self.encoder_optimizer = optimizer
+        self.planner_optimizer = optimizer
+
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
         self.mse_action_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)

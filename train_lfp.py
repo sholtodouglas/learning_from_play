@@ -64,10 +64,6 @@ if args.device == 'TPU' and args.data_source == 'GCS':
 
 print(args)
 
-
-# In[3]:
-
-
 from pathlib import Path
 from pathy import Pathy
 import os
@@ -78,16 +74,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 import time
-
-
-
 pp = pprint.PrettyPrinter(indent=4)
-
-
-
-
-# In[4]:
-
 
 #@title Workpace Setup (Local vs Colab)
 
@@ -137,9 +124,6 @@ TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
 
 # # Data Creation
 
-# In[46]:
-
-
 print("Tensorflow version " + tf.__version__)
 
 if args.device == 'TPU':
@@ -152,50 +136,25 @@ if args.device == 'TPU':
     tf.config.experimental_connect_to_cluster(tpu)
     tf.tpu.experimental.initialize_tpu_system(tpu)
     strategy = tf.distribute.TPUStrategy(tpu)
-
     NUM_DEVICES = strategy.num_replicas_in_sync
     print("REPLICAS: ", NUM_DEVICES)
 else:
     physical_devices = tf.config.list_physical_devices()
     if args.device == 'GPU':
         tf.config.experimental.set_memory_growth(physical_devices[3], enable=True)
+    strategy = tf.distribute.get_strategy()
     NUM_DEVICES = 1
     print(physical_devices)
 
-
-# In[ ]:
-
-
-# Use this to edit modules without needing to restart the kernel
-# !git pull
-# import importlib
-# importlib.reload(lfp.data)
-# importlib.reload(lfp.model)
-# importlib.reload(lfp.plotting)
-# importlib.reload(lfp.train)
-
-
 # # Dataset
-
-# ### Config Flags
-
-# In[48]:
-
-
 
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
 
 dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-# In[49]:
-
 
 # Train data
 train_data = dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords)
 train_dataset = dl.load(train_data)
-
-
-# In[50]:
-
 
 # Validation data
 valid_data = dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords)
@@ -205,9 +164,6 @@ valid_dataset = dl.load(valid_data)
 # # Model
 
 # # Training Loop
-
-# In[51]:
-
 
 from lfp.train import LFPTrainer
 
@@ -235,7 +191,7 @@ def train_setup():
       cnn = None
 
     optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
-    trainer = LFPTrainer(actor, encoder, planner, cnn, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+    trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, trainer
 
 if args.device=='CPU' or args.device=='GPU':
@@ -250,9 +206,6 @@ valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset
 plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
 
 
-# In[52]:
-
-
 from lfp.train import BetaScheduler
 
 beta_sched = BetaScheduler('linear', 
@@ -264,17 +217,11 @@ beta_sched = BetaScheduler('linear',
                            )
 
 
-# In[53]:
-
-
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
 save_inc = 5000
 prev_grad_norm = np.float('inf')
-
-
-# In[54]:
 
 
 run_name = args.run_name
@@ -304,7 +251,6 @@ else:
   t = 0
 
 
-# In[ ]:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
