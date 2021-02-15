@@ -293,7 +293,7 @@ if args.resume:
   load_weights(model_path, actor, encoder, planner, with_optimizer=True)
   print('Loaded model weights and optimiser state')
   
-  prognar.add(t, []) # update the progbar to the most recent point
+  progbar.add(t, []) # update the progbar to the most recent point
 else:
   #Comet
   experiment = Experiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",project_name="learning-from-play",workspace="sholtodouglas")
