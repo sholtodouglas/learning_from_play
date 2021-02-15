@@ -12,13 +12,13 @@ europe-west4-a, lfp_europe_west4_a
 
 # Iowa (v2-8)
 export TPU_ZONE=us-central1-f
-export TPU_NAME=lfp_test
+export TPU_NAME=lfp-us1
 export BUCKET_NAME=iowa_bucket_lfp
 export TPU_SIZE=v2-8
 
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
-export TPU_NAME=lfp1
+export TPU_NAME=lfp-eu1
 export BUCKET_NAME=lfp_europe_west4_a
 export TPU_SIZE=v3-8
 
@@ -30,11 +30,10 @@ ctpu up \
 --zone=$TPU_ZONE \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
---tpu-size=$TPU_SIZE
+--tpu-size=$TPU_SIZE \
+--machine-type=n1-standard-1 \
+--disk-size-gb=50
 
-
-
- \
 [--preemptible]
 ```
 
