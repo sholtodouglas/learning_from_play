@@ -135,7 +135,7 @@ class LFPTrainer():
         reg_loss = tfd.kl_divergence(encoding, plan)  # + KL(plan, encoding)
         return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.global_batch_size)
 
-    def train_step(self, inputs, beta, prev_global_grad_norm):
+    def train_step(self, inputs, beta):
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
             # Todo: figure out mask and seq_lens for new dataset
             states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
@@ -234,7 +234,7 @@ class LFPTrainer():
 
 
     @tf.function
-    def distributed_train_step(self,dataset_inputs, beta, prev_global_grad_norm):
+    def distributed_train_step(self,dataset_inputs, beta):
         per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
