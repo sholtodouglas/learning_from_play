@@ -31,42 +31,6 @@ def log(metric):
     result = metric.result()
     metric.reset_states()
     return result
-    
-def create_metrics():
-    train_loss = tf.keras.metrics.Mean(name='train_loss')
-    valid_loss = tf.keras.metrics.Mean(name='valid_loss')
-    actor_grad_norm = tf.keras.metrics.Mean(name='actor_grad_norm')
-    encoder_grad_norm = tf.keras.metrics.Mean(name='encoder_grad_norm')
-    planner_grad_norm = tf.keras.metrics.Mean(name='planner_grad_norm')
-
-    actor_grad_norm_clipped = tf.keras.metrics.Mean(name='actor_grad_norm_clipped')
-    encoder_grad_norm_clipped = tf.keras.metrics.Mean(name='encoder_grad_norm_clipped')
-    planner_grad_norm_clipped = tf.keras.metrics.Mean(name='planner_grad_norm_clipped')
-
-    global_grad_norm = tf.keras.metrics.Mean(name='global_grad_norm')
-
-    test = tf.keras.metrics.Mean(name='test')
-    test2 = tf.keras.metrics.Mean(name='test2')
-
-    train_act_with_enc_loss = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
-    train_act_with_plan_loss = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
-    valid_act_with_enc_loss = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
-    valid_act_with_plan_loss = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
-
-    train_reg_loss = tf.keras.metrics.Mean(name='reg_loss')
-    valid_reg_loss = tf.keras.metrics.Mean(name='valid_reg_loss')
-
-    valid_position_loss = tf.keras.metrics.Mean(name='valid_position_loss')
-    valid_max_position_loss = MaxMetric(name='valid_max_position_loss')
-    valid_rotation_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
-    valid_max_rotation_loss = MaxMetric(name='valid_max_rotation_loss')
-    valid_gripper_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
-    return train_loss, valid_loss, actor_grad_norm, encoder_grad_norm, planner_grad_norm, \
-          actor_grad_norm_clipped, encoder_grad_norm_clipped, planner_grad_norm_clipped, global_grad_norm, \
-          test, test2,  train_act_with_enc_loss, train_act_with_plan_loss, valid_act_with_enc_loss, valid_act_with_plan_loss,\
-          train_reg_loss, valid_reg_loss, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss
-
-
 
 def log_action_breakdown(policy, actions, mask, seq_lens, probabilistic, quat_act, valid_position_loss, valid_max_position_loss, valid_rotation_loss, valid_max_rotation_loss, valid_gripper_loss, compute_MAE):
     if quat_act:
