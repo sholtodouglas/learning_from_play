@@ -259,7 +259,7 @@ class LFPTrainer():
                                  'actor_optimizer': self.actor_optimizer,
                                  'encoder_optimizer': self.encoder_optimizer,
                                  'planner_optimizer': self.planner_optimizer}
-                if self.args.imgs:
+                if self.args.images:
                     ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn)
                 else:
                     ckpt = tf.train.Checkpoint(**saved_objects)
@@ -301,7 +301,7 @@ class LFPTrainer():
                              'actor_optimizer': self.actor_optimizer,
                              'encoder_optimizer': self.encoder_optimizer,
                              'planner_optimizer': self.planner_optimizer}
-            if self.args.imgs:
+            if self.args.images:
                 ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn)
             else:
                 ckpt = tf.train.Checkpoint(**saved_objects)
