@@ -136,7 +136,7 @@ class LFPTrainer():
         return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.global_batch_size)
 
     def train_step(self, inputs, beta, prev_global_grad_norm):
-        with tf.GradientTape() as tape:
+        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
             # Todo: figure out mask and seq_lens for new dataset
             states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
 
@@ -157,7 +157,7 @@ class LFPTrainer():
             if self.args.gcbc:
                 distrib = self.actor([states, goals])
                 loss = self.compute_loss(actions, distrib, mask, seq_lens)
-                gradients = tape.gradient(loss, self.actor.trainable_variables)
+                gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
                 encoding = self.encoder([states, actions])
@@ -175,9 +175,9 @@ class LFPTrainer():
                 reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
                 loss = act_enc_loss + reg_loss * beta
 
-                actor_gradients = tape.gradient(loss, self.actor.trainable_variables)
-                encoder_gradients = tape.gradient(loss, self.encoder.trainable_variables)
-                planner_gradients = tape.gradient(loss, self.planner.trainable_variables)
+                actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
+                encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
+                planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
 
                 actor_norm = record(tf.linalg.global_norm(actor_gradients), self.metrics['actor_grad_norm'])
                 encoder_norm = record(tf.linalg.global_norm(encoder_gradients), self.metrics['encoder_grad_norm'])
@@ -235,7 +235,7 @@ class LFPTrainer():
 
     @tf.function
     def distributed_train_step(self,dataset_inputs, beta, prev_global_grad_norm):
-        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, prev_global_grad_norm))
+        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 

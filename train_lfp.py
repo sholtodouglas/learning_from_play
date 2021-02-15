@@ -259,7 +259,7 @@ while t < args.train_steps:
     start_time = time.time()
     beta = beta_sched.scheduler(t)
     x = next(train_dist_dataset)
-    total_train_loss = trainer.distributed_train_step(x, beta, prev_grad_norm)
+    total_train_loss = trainer.distributed_train_step(x, beta)
     
     if t % valid_inc == 0:  
         valid_x = next(valid_dist_dataset)
@@ -279,8 +279,6 @@ while t < args.train_steps:
         # Plot on WandB
         wandb.log(metrics, step=t)
 
-        prev_grad_norm = metrics['global_grad_norm']
-          
     if t % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
         if not args.gcbc and not args.images:
