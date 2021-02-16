@@ -38,7 +38,7 @@ parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
 parser.add_argument('--fp16', default=False, action='store_true')
-parser.add_argument('--debug', default=False, action='store_true')
+# parser.add_argument('--debug', default=False, action='store_true')
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -62,7 +62,7 @@ if args.device == 'TPU' and args.data_source == 'GCS':
 # -le 512 \
 # -lp 2048 \
 # -z 256 \
-# -lr 3e-4
+# -lr 1e-3
 
 print(args)
 
@@ -75,6 +75,7 @@ import pprint
 import logging
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 import time
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -196,7 +197,7 @@ def train_setup():
     else:
       cnn = None
 
-    optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+    optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
     trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, trainer
 
@@ -260,52 +261,52 @@ else:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
-if args.debug:
-    print(f'Profiling worker @ {tpu.get_master()}')
-    tf.profiler.experimental.client.trace(tpu.get_master(), str(STORAGE_PATH/'tensorboard'), 2000)
+@tf.function
+def train(t=0):
+    while t < args.train_steps:
+        start_time = time.time()
+        beta = beta_sched.scheduler(t)
+        x = next(train_dist_dataset)
+        total_train_loss = trainer.distributed_train_step(x, beta)
 
-while t < args.train_steps:
-    start_time = time.time()
-    beta = beta_sched.scheduler(t)
-    x = next(train_dist_dataset)
-    total_train_loss = trainer.distributed_train_step(x, beta)
-    
-    if t % valid_inc == 0:  
-        valid_x = next(valid_dist_dataset)
-        if args.gcbc:
-          total_val_loss = trainer.distributed_test_step(valid_x, beta)
-        else:
-          total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
-        step_time = round(time.time() - start_time, 1)
+        if t % valid_inc == 0:
+            valid_x = next(valid_dist_dataset)
+            if args.gcbc:
+              total_val_loss = trainer.distributed_test_step(valid_x, beta)
+            else:
+              total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
+            step_time = round(time.time() - start_time, 1)
 
-        metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
-        metrics['step_time'] = step_time
+            metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
+            metrics['step_time'] = step_time
 
-        # validation plotting
-        progbar.add(valid_inc, [('Train Loss', metrics['train_loss']), 
-                                ('Validation Loss', metrics['valid_loss']), 
-                                ('Time (s)', step_time)])
-        #Plot on Comet
-        experiment.log_metrics(metrics,step=t)
-        # Plot on WandB
-        wandb.log(metrics, step=t)
+            # validation plotting
+            progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
+                                    ('Validation Loss', metrics['valid_loss']),
+                                    ('Time (s)', step_time)])
+            #Plot on Comet
+            experiment.log_metrics(metrics,step=t)
+            # Plot on WandB
+            wandb.log(metrics, step=t)
 
-    if t % save_inc == 0:
-        trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-        if not args.gcbc and not args.images:
-          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+        if t % save_inc == 0:
+            trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
+            if not args.gcbc and not args.images:
+              z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
-          #Comet
-          experiment.log_figure('z_enc', z_enc, step=t)
-          experiment.log_figure('z_plan', z_plan,step=t)
+              #Comet
+              experiment.log_figure('z_enc', z_enc, step=t)
+              experiment.log_figure('z_plan', z_plan,step=t)
 
-          # WandB
-          wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
-          
-          #latent_fig = project_enc_and_plan(ze, zp)
-          #latent_img = plot_to_image(latent_fig)
+              # WandB
+              wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
 
-    t += 1
+              #latent_fig = project_enc_and_plan(ze, zp)
+              #latent_img = plot_to_image(latent_fig)
+
+        t += 1
+
+train(t)
 
 
 
