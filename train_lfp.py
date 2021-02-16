@@ -37,6 +37,7 @@ parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
+parser.add_argument('--fp16', default=False, action='store_true')
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -138,10 +139,14 @@ if args.device == 'TPU':
     strategy = tf.distribute.TPUStrategy(tpu)
     NUM_DEVICES = strategy.num_replicas_in_sync
     print("REPLICAS: ", NUM_DEVICES)
+    if args.fp16:
+        tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 else:
     physical_devices = tf.config.list_physical_devices()
     if args.device == 'GPU':
         tf.config.experimental.set_memory_growth(physical_devices[3], enable=True)
+        if args.fp16:
+            tf.keras.mixed_precision.set_global_policy('mixed_float16')
     strategy = tf.distribute.get_strategy()
     NUM_DEVICES = 1
     print(physical_devices)
@@ -267,13 +272,15 @@ while t < args.train_steps:
           total_val_loss = trainer.distributed_test_step(valid_x, beta)
         else:
           total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
+        step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
+        metrics['step_time'] = step_time
 
         # validation plotting
         progbar.add(valid_inc, [('Train Loss', metrics['train_loss']), 
                                 ('Validation Loss', metrics['valid_loss']), 
-                                ('Time (s)', round(time.time() - start_time, 1))])
+                                ('Time (s)', step_time)])
         #Plot on Comet
         experiment.log_metrics(metrics,step=t)
         # Plot on WandB

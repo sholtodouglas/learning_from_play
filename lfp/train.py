@@ -7,6 +7,7 @@ from tensorflow.keras.metrics import Accuracy
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.utils import Progbar
 from tensorflow.distribute import ReduceOp
+from tensorflow.keras import mixed_precision
 import tensorflow_probability as tfp
 tfd = tfp.distributions
 import lfp
@@ -81,7 +82,9 @@ class LFPTrainer():
         self.dl = dl
         self.global_batch_size = global_batch_size
 
-        self.actor_optimizer = optimizer
+        if args.fp16:
+            optimizer = mixed_precision.LossScaleOptimizer(optimizer)
+        self.actor_optimizer = optimizer # does this reuse the same optimizer object? Should we .copy()?
         self.encoder_optimizer = optimizer
         self.planner_optimizer = optimizer
 
@@ -129,11 +132,15 @@ class LFPTrainer():
         per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
         return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
-
     def compute_regularisation_loss(self, plan, encoding):
         # Reverse KL(enc|plan): we want planner to map to encoder (weighted by encoder)
         reg_loss = tfd.kl_divergence(encoding, plan)  # + KL(plan, encoding)
         return tf.nn.compute_average_loss(reg_loss, global_batch_size=self.global_batch_size)
+
+    @staticmethod
+    def compute_fp16_grads(optimizer, loss, tape, model):
+        scaled_loss = optimizer.get_scaled_loss(loss)
+        return tape.gradient(scaled_loss, model.trainable_variables)
 
     def train_step(self, inputs, beta):
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
@@ -175,9 +182,14 @@ class LFPTrainer():
                 reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
                 loss = act_enc_loss + reg_loss * beta
 
-                actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
-                encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
-                planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
+                if self.args.fp16:
+                    actor_gradients = self.compute_fp16_grads(self.actor_optimizer, loss, actor_tape, self.actor)
+                    encoder_gradients = self.compute_fp16_grads(self.encoder_optimizer, loss, encoder_tape, self.encoder)
+                    planner_gradients = self.compute_fp16_grads(self.planner_optimizer, loss, planner_tape, self.planner)
+                else:
+                    actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
+                    encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
+                    planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
 
                 actor_norm = record(tf.linalg.global_norm(actor_gradients), self.metrics['actor_grad_norm'])
                 encoder_norm = record(tf.linalg.global_norm(encoder_gradients), self.metrics['encoder_grad_norm'])
