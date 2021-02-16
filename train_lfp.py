@@ -38,6 +38,7 @@ parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
 parser.add_argument('--fp16', default=False, action='store_true')
+parser.add_argument('--debug', default=False, action='store_true')
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -259,6 +260,8 @@ else:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
+if args.debug:
+    tf.profiler.experimental.client.trace(tpu.get_master(), STORAGE_PATH/'tensorboard', 2000)
 
 while t < args.train_steps:
     start_time = time.time()
