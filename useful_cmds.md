@@ -31,11 +31,12 @@ ctpu up \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
 --tpu-size=$TPU_SIZE \
---machine-type=n1-standard-1 \
+--machine-type=g1-small \
 --disk-size-gb=50
 
 [--preemptible]
 ```
+Can also potentially opt for an `f1-micro` if we're still under-utilising the VM
 
 # ssh into vm instance
 
