@@ -261,6 +261,7 @@ from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_imag
 from lfp.metric import log # gets state and clears simultaneously
 
 if args.debug:
+    print(f'Profiling worker @ {tpu.get_master()}')
     tf.profiler.experimental.client.trace(tpu.get_master(), STORAGE_PATH/'tensorboard', 2000)
 
 while t < args.train_steps:
