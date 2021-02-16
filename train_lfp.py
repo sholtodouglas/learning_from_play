@@ -261,52 +261,54 @@ else:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
+# Creating these autograph wrappers so that tf.data operations are executed in graph mode
 @tf.function
-def train(t=0):
-    while t < args.train_steps:
-        start_time = time.time()
-        beta = beta_sched.scheduler(t)
-        x = next(train_dist_dataset)
-        total_train_loss = trainer.distributed_train_step(x, beta)
+def train(train_dataset, beta):
+    train_batch = next(train_dataset)
+    trainer.distributed_train_step(train_batch, beta)
 
-        if t % valid_inc == 0:
-            valid_x = next(valid_dist_dataset)
-            if args.gcbc:
-              total_val_loss = trainer.distributed_test_step(valid_x, beta)
-            else:
-              total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
-            step_time = round(time.time() - start_time, 1)
+@tf.function
+def validate(valid_dataset, beta):
+    valid_batch = next(valid_dataset)
+    trainer.distributed_train_step(valid_batch, beta)
 
-            metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
-            metrics['step_time'] = step_time
+while t < args.train_steps:
+    start_time = time.time()
+    beta = beta_sched.scheduler(t)
+    train(train_dist_dataset, beta)
 
-            # validation plotting
-            progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
-                                    ('Validation Loss', metrics['valid_loss']),
-                                    ('Time (s)', step_time)])
-            #Plot on Comet
-            experiment.log_metrics(metrics,step=t)
-            # Plot on WandB
-            wandb.log(metrics, step=t)
+    if t % valid_inc == 0:
+        validate(valid_dist_dataset, beta)
+        step_time = round(time.time() - start_time, 1)
 
-        if t % save_inc == 0:
-            trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-            if not args.gcbc and not args.images:
-              z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+        metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
+        metrics['step_time'] = step_time
 
-              #Comet
-              experiment.log_figure('z_enc', z_enc, step=t)
-              experiment.log_figure('z_plan', z_plan,step=t)
+        # validation plotting
+        progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
+                                ('Validation Loss', metrics['valid_loss']),
+                                ('Time (s)', step_time)])
+        #Plot on Comet
+        experiment.log_metrics(metrics,step=t)
+        # Plot on WandB
+        wandb.log(metrics, step=t)
 
-              # WandB
-              wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
+    if t % save_inc == 0:
+        trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
+        if not args.gcbc and not args.images:
+          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
-              #latent_fig = project_enc_and_plan(ze, zp)
-              #latent_img = plot_to_image(latent_fig)
+          #Comet
+          experiment.log_figure('z_enc', z_enc, step=t)
+          experiment.log_figure('z_plan', z_plan,step=t)
 
-        t += 1
+          # WandB
+          wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
 
-train(t)
+          #latent_fig = project_enc_and_plan(ze, zp)
+          #latent_img = plot_to_image(latent_fig)
+
+    t += 1
 
 
 

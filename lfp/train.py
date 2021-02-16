@@ -246,13 +246,13 @@ class LFPTrainer():
 
 
     @tf.function
-    def distributed_train_step(self,dataset_inputs, beta):
+    def distributed_train_step(self, dataset_inputs, beta):
         per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
     @tf.function
-    def distributed_test_step(self,dataset_inputs, beta):
+    def distributed_test_step(self, dataset_inputs, beta):
         if self.args.gcbc:
             per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
             return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
