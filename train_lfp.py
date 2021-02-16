@@ -268,9 +268,9 @@ def train(train_dataset, beta):
     trainer.distributed_train_step(train_batch, beta)
 
 @tf.function
-def validate(valid_dataset, beta):
+def test(valid_dataset, beta):
     valid_batch = next(valid_dataset)
-    trainer.distributed_train_step(valid_batch, beta)
+    trainer.distributed_test_step(valid_batch, beta)
 
 while t < args.train_steps:
     start_time = time.time()
@@ -278,7 +278,7 @@ while t < args.train_steps:
     train(train_dist_dataset, beta)
 
     if t % valid_inc == 0:
-        validate(valid_dist_dataset, beta)
+        test(valid_dist_dataset, beta)
         step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
