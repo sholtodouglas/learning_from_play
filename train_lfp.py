@@ -262,7 +262,7 @@ from lfp.metric import log # gets state and clears simultaneously
 
 if args.debug:
     print(f'Profiling worker @ {tpu.get_master()}')
-    tf.profiler.experimental.client.trace(tpu.get_master(), STORAGE_PATH/'tensorboard', 2000)
+    tf.profiler.experimental.client.trace(tpu.get_master(), str(STORAGE_PATH/'tensorboard'), 2000)
 
 while t < args.train_steps:
     start_time = time.time()
