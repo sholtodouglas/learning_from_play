@@ -113,6 +113,31 @@ class tester():
             g[obj] = pos
             
         return tf.expand_dims(tf.expand_dims(g,0),0)
+    
+    def set_door(self, position='middle'): # or 'right' or 'left'
+        door = self.env.panda.joints[0]
+        self.env.panda.bullet_client.resetJointState(door, 0, door_positions[position])
+        
+    ## And a few functions to reset individual elements so that the tests are accurate (hard to put things in a closed drawer)
+    def set_drawer(self, position="middle"): # or 'open' or 'closed'
+        drawer = self.env.panda.drawer
+        drawer_pos = drawer['defaults']['pos']
+        drawer_pos[1] = drawer_positions[position]
+        self.env.panda.bullet_client.resetBasePositionAndOrientation(drawer['drawer'], drawer_pos,
+                                                                   drawer['defaults']['ori'])
+       
+    def prepare_env(self, task):
+        '''
+        Make sure the env is in the right position to test the skill
+        '''
+        if task in ['door_right', 'block_cupboard_right']:
+            self.set_door(position='left')
+        if task in ['door_left', 'block_cupboard_left', 'button']:
+            self.set_door(position='right')
+        if task in ['open_drawer']:
+            self.set_drawer(position='closed')
+        if task in ['close_drawer', 'block_drawer']:
+            self.set_drawer(position='open')
 
 
 
@@ -136,3 +161,29 @@ tasks = {
     'dial_on': (dial, dial_positions['one']),
     'dial_off': (dial, dial_positions['two']),
 }
+
+# So we test rotation in more diverse positions, do it at the current position
+tests = {
+    'block_left': (block, obj_poses['left'], 'default'),
+    'block_right': (block, obj_poses['right'], 'default'),
+    'block_shelf': (block, obj_poses['shelf'], 'default'),
+    'block_cupboard_right': (block, obj_poses['cupboard_right'], 'default'),
+    'block_cupboard_left': (block, obj_poses['cupboard_left'], 'default'),
+    'block_drawer':  (block, obj_poses['open_drawer'], 'lengthways'),
+    'block_upright': (block,obj_poses['default'], 'upright'),
+    'block_lengthways': (block, None, 'lengthways'),
+    'block_lengthways_left': (block, None, 'lengthways'),
+    'block_ori_default': (block, obj_poses['default'], 'default'),
+    'button': (button, button_positions['closed']),
+    'door_left': (door, door_positions['left']),
+    'door_right': (door, door_positions['right']),
+    'open_drawer': (drawer, drawer_positions['open']),
+    'close_drawer': (drawer, drawer_positions['closed']),
+    'dial_on': (dial, dial_positions['one']),
+    'dial_off': (dial, dial_positions['two']),
+}
+
+
+
+
+    

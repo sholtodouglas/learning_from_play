@@ -142,41 +142,53 @@ class LFPTrainer():
         scaled_loss = optimizer.get_scaled_loss(loss)
         return tape.gradient(scaled_loss, model.trainable_variables)
 
+    def step(self, inputs):
+        '''
+        A function which wraps the shared processing between train and test step
+        '''
+        states, actions,  goals = inputs['obs'], inputs['acts'], inputs['goals']
+
+        # 1. When using imagesChange the definition of obs_dim to feature encoder dim + proprioceptive features
+        # 2. Reshape imgs to B*T H W C.
+        # 3. Sub in for states and goals.
+        # 4. THen there should be no further changes!
+        if self.args.images:
+            imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
+            B, T, H, W, C = imgs.shape
+            imgs, goal_imgs = tf.reshape(imgs, [B * T, H, W, C]), tf.reshape(goal_imgs, [B * T, H, W, C])
+            img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B, T, -1]), tf.reshape(self.cnn(goal_imgs),[B, T, -1])
+            states = tf.concat([img_embeddings, proprioceptive_features],
+                               -1)  # gets both the image and it's own xyz ori and angle as pose
+            goals = goal_embeddings  # should be B,T, embed_size
+
+        if self.args.gcbc:
+            distrib = self.actor([states, goals])
+            return distrib
+        else:
+            encoding = self.encoder([states, actions])
+            plan = self.planner([states[:, 0, :], goals[:, 0,
+                                                  :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
+            z_enc = encoding.sample()
+            z_plan = plan.sample()
+            z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
+            z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
+
+            enc_policy = self.actor([states, z_enc_tiled, goals])
+            plan_policy = self.actor([states, z_plan_tiled, goals])
+            return enc_policy, plan_policy, encoding, plan
+
+
     def train_step(self, inputs, beta):
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
-            # Todo: figure out mask and seq_lens for new dataset
-            states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
-
-            # Ok, what steps do we need to take
-            # 1. When using imagesChange the definition of obs_dim to feature encoder dim + proprioceptive features
-            # 2. Reshape imgs to B*T H W C.
-            # 3. Sub in for states and goals.
-            # 4. THen there should be no further changes!
-            if self.args.images:
-                imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
-                B,T,H,W,C = imgs.shape
-                imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
-                img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1]), tf.reshape(self.cnn(goal_imgs), [B,T,-1])
-
-                states = tf.concat([img_embeddings, proprioceptive_features], -1) # gets both the image and it's own xyz ori and angle as pose
-                goals = goal_embeddings # should be B,T, embed_size
+            actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
             if self.args.gcbc:
-                distrib = self.actor([states, goals])
-                loss = self.compute_loss(actions, distrib, mask, seq_lens)
+                policy = self.step(inputs)
+                loss = self.compute_loss(actions, policy, mask, seq_lens)
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
-                self.optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
+                self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
-                encoding = self.encoder([states, actions])
-                plan = self.planner([states[:, 0, :], goals[:, 0,:]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
-                z_enc = encoding.sample()
-                z_plan = plan.sample()
-                z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
-                z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
-
-                enc_policy = self.actor([states, z_enc_tiled, goals])
-                plan_policy = self.actor([states, z_plan_tiled, goals])
-
+                enc_policy, plan_policy, encoding, plan = self.step(inputs)
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['train_act_with_plan_loss'])
                 reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
@@ -207,31 +219,15 @@ class LFPTrainer():
 
 
     def test_step(self, inputs, beta):
-        states, actions, goals, seq_lens, mask = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
-        ########################### Between here
-        if self.args.images:
-            imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
-            B,T,H,W,C = imgs.shape
-            imgs, goal_imgs = tf.reshape(imgs, [B*T, H,W,C]), tf.reshape(goal_imgs, [B*T, H,W,C])
-            img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B,T,-1]), tf.reshape(self.cnn(goal_imgs), [B,T,-1])
-
-            states = tf.concat([img_embeddings, proprioceptive_features], -1) # gets both the image and it's own xyz ori and angle as pose
-            goals = goal_embeddings# should be B,T, embed_size
+        actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
         if self.args.gcbc:
-            policy = self.actor([states, goals], training=False)
+            policy = self.step(inputs)
             loss = self.compute_loss(actions, policy, mask, seq_lens)
             log_action_breakdown(policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
                                  self.valid_rotation_loss, self.valid_max_rotation_loss, self.valid_gripper_loss, self.compute_MAE)
         else:
-            encoding = self.encoder([states, actions])
-            plan = self.planner([states[:, 0, :], goals[:, 0,:]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
-            z_enc = encoding.sample()
-            z_plan = plan.sample()
-            z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
-            z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
-            enc_policy = self.actor([states, z_enc_tiled, goals])
-            plan_policy = self.actor([states, z_plan_tiled, goals])
+            enc_policy, plan_policy, encoding, plan = self.step(inputs)
             ############### and here could be abstracted into one function
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
             act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
@@ -239,10 +235,7 @@ class LFPTrainer():
             loss = act_plan_loss + reg_loss * beta
             log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
-        if self.args.gcbc:
-            return record(loss, self.metrics['valid_loss'])
-        else:
-            return record(loss,self.metrics['valid_loss']), z_enc, z_plan
+        return record(loss,self.metrics['valid_loss'])
 
 
     @tf.function
@@ -253,12 +246,8 @@ class LFPTrainer():
 
     @tf.function
     def distributed_test_step(self, dataset_inputs, beta):
-        if self.args.gcbc:
-            per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
-        else:
-            per_replica_losses, ze, zp = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
-            return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None), ze.values[0], zp.values[0]
+        per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
+        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
     def save_weights(self, path, run_id=None, experiment_key=None):
