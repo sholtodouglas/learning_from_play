@@ -86,7 +86,7 @@ def load_img(path, args):
     else:
         return np.array(imageio.imread(path, as_gray=False, pilmode="RGB"))
 
-def get_labelled_trajs(TEST_DATA_PATH, bucket=False, args= {'images':False, 'data_source':'local'} ):
+def get_labelled_trajs(TEST_DATA_PATH, bucket=False, args= None ):
     test_labels = load_GCS_safe(TEST_DATA_PATH/'trajectory_labels.npz')['trajectory_labels']
 
     acts,obs, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = [], [], [], [], [], [], [], [], []

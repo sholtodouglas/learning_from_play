@@ -193,7 +193,8 @@ def train_setup():
         planner = lfp.model.create_planner(**model_params)
 
     if args.images:
-      cnn = lfp.model.create_vision_network(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
+        cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
+        lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
     else:
       cnn = None
 
