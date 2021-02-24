@@ -290,7 +290,9 @@ class LFPTrainer():
                 self.cnn.save_weights(f'{path}/cnn.h5')
 
             os.makedirs(path+'/optimizers', exist_ok=True)
-            np.save(f'{path}/optimizers/optimizer.npy', self.optimizer.get_weights(), allow_pickle=True)
+            np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights(), allow_pickle=True)
+            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights(), allow_pickle=True)
+            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights(), allow_pickle=True)
 
 
     def load_weights(self, path, with_optimizer=False, from_checkpoint=False):

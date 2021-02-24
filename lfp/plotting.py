@@ -5,6 +5,9 @@ import tensorflow as tf
 import io
 from io import BytesIO
 from tensorflow.python.lib.io import file_io
+from lfp.data import decode_image
+import imageio
+import lfp
 
 reducer = umap.UMAP(metric='cosine', random_state=42)
 
@@ -77,11 +80,16 @@ def load_GCS_safe(path):
     else:
         return np.load(path, allow_pickle=True)
 
+def load_img(path, args):
+    if args.data_source == 'GCS':
+        return decode_image(tf.io.read_file(path))
+    else:
+        return np.array(imageio.imread(path, as_gray=False, pilmode="RGB"))
 
-def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
+def get_labelled_trajs(TEST_DATA_PATH, bucket=False, args= {'images':False, 'data_source':'local'} ):
     test_labels = load_GCS_safe(TEST_DATA_PATH/'trajectory_labels.npz')['trajectory_labels']
 
-    acts,obs, goals, labels, colors, paths = [], [], [], [], [], []
+    acts,obs, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = [], [], [], [], [], [], [], [], []
     # this could be sped up significantly by just storing the trajs in memory, it takes ms on my local, but is a bit slow with colabs cpu
     
 
@@ -101,9 +109,21 @@ def get_labelled_trajs(TEST_DATA_PATH, bucket=False):
         traj_acts = data['acts'][start:end]
         traj_obs = data['obs'][start:end]
         traj_goals = data['achieved_goals'][end]
-        acts.append(traj_acts), obs.append(traj_obs), goals.append(traj_goals), labels.append(v), colors.append(c), paths.append(TEST_DATA_PATH/"/".join(k.split('/')[4:]))
 
-    return np.array(obs), np.array(acts), np.array(goals), labels, colors, paths
+        traj_imgs = []
+        if args.images:
+            for i in range(start,end):
+                # Use imageio.imread for Drive, and tf.io for GCS
+                path  =  TEST_DATA_PATH/'states_and_ims'/folder/'ims'/(str(i)+'.jpg')
+                traj_imgs.append(load_img(path,args))
+            traj_goal_img = load_img(TEST_DATA_PATH/'states_and_ims'/folder/'ims'/(str(end)+'.jpg'), args)
+            traj_proprioceptive_features = traj_obs[:,:7] # TODO replace this a central var
+            imgs.append(traj_imgs), goal_imgs.append(traj_goal_img), proprioceptive_features.append(traj_proprioceptive_features)
+        acts.append(traj_acts), obs.append(traj_obs), goals.append(traj_goals), labels.append(v), colors.append(c),paths.append(TEST_DATA_PATH/"/".join(k.split('/')[4:]))
+
+    return np.array(obs), np.array(acts), np.array(goals), labels, colors, paths, np.array(imgs), np.array(goal_imgs), np.array(proprioceptive_features)
+
+
 
 def project_labelled_latents(z_embed, colors, bucket=True):
     
@@ -126,10 +146,19 @@ def project_labelled_latents(z_embed, colors, bucket=True):
     return fig,scatter
 
 
-def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take):
-    bucket = True
-    obs, acts, goals, labels, colors, paths = get_labelled_trajs(TEST_DATA_PATH, bucket=bucket)
+def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
+    '''
+
+    Note: TODO Hard to have sufficient memory to do this in one pop - need to implement some batching logic for imgs
+    '''
+    obs, acts, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = get_labelled_trajs(TEST_DATA_PATH, bucket=bucket, args=args)
     batch_states,batch_acts, batch_goals, batch_colors = batch['obs'][:num_take, :40, :],batch['acts'][:num_take, :40, :], batch['goals'][:num_take, 0, :], [[0.8,0.8,0.8,0.6]]*num_take
+
+    if args.images:
+        batch_imgs, batch_proprioceptive_features, batch_goal_imgs = batch['imgs'][:num_take, :40, :], batch['proprioceptive_features'][:num_take, :40, :], batch['goal_imgs'][:num_take, 0, :]
+        batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
+        obs, goals = lfp.utils.images_to_2D_features(imgs, proprioceptive_features, goal_imgs, cnn)
+
     obs  = np.concatenate([obs, batch_states])
     acts = np.concatenate([acts, batch_acts])
     goals = np.concatenate([goals, batch_goals])

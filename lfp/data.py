@@ -257,9 +257,7 @@ class PlayDataloader():
         # TODO: make this static normalization by some constant
         if self.normalize:
             # Record the mean like we used to @Tristan
-            sklearn.preprocessing.normalize(obs, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(goals, norm='l2', axis=1, copy=False)
-            sklearn.preprocessing.normalize(acts, norm='l2', axis=1, copy=False)
+            raise NotImplementedError
         
         return_dict = {'obs':obs, 
                 'acts':acts, 
