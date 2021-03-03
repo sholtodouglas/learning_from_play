@@ -22,6 +22,8 @@ parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of trai
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
 parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=512, type=int)
+parser.add_argument('-wmax', '--window_size_max', default=50, type=int)
+parser.add_argument('-wmin', '--window_size_min', default=20, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
 parser.add_argument('-lp', '--planner_layer_size', default=512, type=int, help='Layer size of planner, increases size of neural net')
@@ -35,6 +37,8 @@ parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
+parser.add_argument('--fp16', default=False, action='store_true')
+# parser.add_argument('--debug', default=False, action='store_true')
 
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -58,13 +62,9 @@ if args.device == 'TPU' and args.data_source == 'GCS':
 # -le 512 \
 # -lp 2048 \
 # -z 256 \
-# -lr 3e-4
+# -lr 1e-3
 
 print(args)
-
-
-# In[3]:
-
 
 from pathlib import Path
 from pathy import Pathy
@@ -75,17 +75,9 @@ import pprint
 import logging
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 import time
-
-
-
 pp = pprint.PrettyPrinter(indent=4)
-
-
-
-
-# In[4]:
-
 
 #@title Workpace Setup (Local vs Colab)
 
@@ -135,9 +127,6 @@ TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
 
 # # Data Creation
 
-# In[46]:
-
-
 print("Tensorflow version " + tf.__version__)
 
 if args.device == 'TPU':
@@ -150,55 +139,29 @@ if args.device == 'TPU':
     tf.config.experimental_connect_to_cluster(tpu)
     tf.tpu.experimental.initialize_tpu_system(tpu)
     strategy = tf.distribute.TPUStrategy(tpu)
-
     NUM_DEVICES = strategy.num_replicas_in_sync
     print("REPLICAS: ", NUM_DEVICES)
+    if args.fp16:
+        tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 else:
     physical_devices = tf.config.list_physical_devices()
     if args.device == 'GPU':
         tf.config.experimental.set_memory_growth(physical_devices[3], enable=True)
+        if args.fp16:
+            tf.keras.mixed_precision.set_global_policy('mixed_float16')
+    strategy = tf.distribute.get_strategy()
     NUM_DEVICES = 1
     print(physical_devices)
 
-
-# In[ ]:
-
-
-# Use this to edit modules without needing to restart the kernel
-# !git pull
-# import importlib
-# importlib.reload(lfp.data)
-# importlib.reload(lfp.model)
-# importlib.reload(lfp.plotting)
-# importlib.reload(lfp.train)
-
-
 # # Dataset
 
-# ### Config Flags
+GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
 
-# In[48]:
-
-
-if args.images:
-  print('Using images - reducing batch size')
-  GLOBAL_BATCH_SIZE = 128
-  shuffle_size = GLOBAL_BATCH_SIZE*5
-else:
-  GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
-  shuffle_size = None # allow the dl to set it
-
-dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE, shuffle_size = shuffle_size)
-# In[49]:
-
+dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
 
 # Train data
 train_data = dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords)
 train_dataset = dl.load(train_data)
-
-
-# In[50]:
-
 
 # Validation data
 valid_data = dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords)
@@ -209,9 +172,6 @@ valid_dataset = dl.load(valid_data)
 
 # # Training Loop
 
-# In[51]:
-
-
 from lfp.train import LFPTrainer
 
 def train_setup():
@@ -220,7 +180,7 @@ def train_setup():
                 'act_dim':dl.act_dim,
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
-
+    
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
     if args.gcbc:
@@ -231,15 +191,15 @@ def train_setup():
         encoder = lfp.model.create_encoder(**model_params)
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
-        
+
     if args.images:
         cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
-        lfp.utils.build_cnn(cnn) # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
+        lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
     else:
-        cnn = None
+      cnn = None
 
-    optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
-    trainer = LFPTrainer(actor, encoder, planner, cnn, optimizer, strategy, args, dl, GLOBAL_BATCH_SIZE)
+    optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
+    trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, trainer
 
 if args.device=='CPU' or args.device=='GPU':
@@ -254,9 +214,6 @@ valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset
 plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
 
 
-# In[52]:
-
-
 from lfp.train import BetaScheduler
 
 beta_sched = BetaScheduler('linear', 
@@ -268,17 +225,11 @@ beta_sched = BetaScheduler('linear',
                            )
 
 
-# In[53]:
-
-
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
 save_inc = 5000
 prev_grad_norm = np.float('inf')
-
-
-# In[54]:
 
 
 run_name = args.run_name
@@ -297,7 +248,7 @@ if args.resume:
   load_weights(model_path, actor, encoder, planner, with_optimizer=True)
   print('Loaded model weights and optimiser state')
   
-  prognar.add(t, []) # update the progbar to the most recent point
+  progbar.add(t, []) # update the progbar to the most recent point
 else:
   #Comet
   experiment = Experiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",project_name="learning-from-play",workspace="sholtodouglas")
@@ -308,40 +259,44 @@ else:
   t = 0
 
 
-# In[ ]:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
+# Creating these autograph wrappers so that tf.data operations are executed in graph mode
+@tf.function
+def train(train_dataset, beta):
+    train_batch = next(train_dataset)
+    trainer.distributed_train_step(train_batch, beta)
+
+@tf.function
+def test(valid_dataset, beta):
+    valid_batch = next(valid_dataset)
+    trainer.distributed_test_step(valid_batch, beta)
 
 while t < args.train_steps:
     start_time = time.time()
     beta = beta_sched.scheduler(t)
-    x = next(train_dist_dataset)
-    total_train_loss = trainer.distributed_train_step(x, beta, prev_grad_norm)
-    
-    if t % valid_inc == 0:  
-        valid_x = next(valid_dist_dataset)
-        if args.gcbc:
-          total_val_loss = trainer.distributed_test_step(valid_x, beta)
-        else:
-          total_val_loss, ze, zp = trainer.distributed_test_step(valid_x, beta)
+    train(train_dist_dataset, beta)
+
+    if t % valid_inc == 0:
+        test(valid_dist_dataset, beta)
+        step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
+        metrics['step_time'] = step_time
 
         # validation plotting
-        progbar.add(valid_inc, [('Train Loss', metrics['train_loss']), 
-                                ('Validation Loss', metrics['valid_loss']), 
-                                ('Time (s)', round(time.time() - start_time, 1))])
+        progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
+                                ('Validation Loss', metrics['valid_loss']),
+                                ('Time (s)', step_time)])
         #Plot on Comet
         experiment.log_metrics(metrics,step=t)
         # Plot on WandB
         wandb.log(metrics, step=t)
 
-        prev_grad_norm = metrics['global_grad_norm']
-          
-    if t % save_inc == 0:
+    if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-        if not args.gcbc:
+        if not args.gcbc and not args.images:
           z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
           #Comet
@@ -350,11 +305,9 @@ while t < args.train_steps:
 
           # WandB
           wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
-          
+
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)
 
     t += 1
-
-
 
