@@ -81,3 +81,28 @@ tpuv3-test \
 To see which python processes are currently running use:
 
 ```ps -ef | grep python```
+
+
+
+python3 train_lfp.py \
+B0_00003 \
+--train_dataset UR5 UR5_slow_gripper UR5_high_transition \
+--test_dataset UR5_slow_gripper_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 512 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.00003 \
+-t 500000 \
+-b 64 \
+-wmin 10 \
+-max 30 \
+-i \
+-tfr \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME

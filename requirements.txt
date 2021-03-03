@@ -14,4 +14,5 @@ natsort
 tqdm
 umap-learn
 scikit-learn
+imageio
 -e git+https://github.com/sholtodouglas/pandaRL@ef8fea79da58b55576a85cb66104d6669d018a6e#egg=pandaRL
