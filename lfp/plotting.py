@@ -71,7 +71,7 @@ bucket_colors = {
  'block + shelf': [0.05, 0.2, 0.7],
 }
 
-hold_out = ['dial']
+hold_out = ['dial', 'block in/out drawer'] # block in out drawer is very similar to pick place
 
 def load_GCS_safe(path):
     if "gs://" in str(path):
@@ -125,9 +125,9 @@ def get_labelled_trajs(TEST_DATA_PATH, bucket=False, args= None ):
 
 
 
-def project_labelled_latents(z_embed, colors, bucket=True):
+def project_labelled_latents(z_embed, colors, bucket=True, figsize=(14,14)):
     
-    fig = plt.figure(figsize=(14,14))
+    fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
     scatter = ax.scatter(z_embed[:, 0], z_embed[:, 1], s=60, label='z_embed', c = colors)
     ax.set_aspect('equal', 'datalim')
@@ -143,13 +143,11 @@ def project_labelled_latents(z_embed, colors, bucket=True):
     markers = [plt.Line2D([0,0],[0,0],color=color, marker='o', linestyle='') for color in colors_dict.values()]
     plt.legend(markers, colors_dict.keys(), numpoints=1)
     plt.axis('off')
-    return fig,scatter
+    return fig,scatter, ax
 
-
-def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
+def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
     '''
-
-    Note: TODO Hard to have sufficient memory to do this in one pop - need to implement some batching logic for imgs
+    Separating this out for reuse in live model display 
     '''
     obs, acts, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = get_labelled_trajs(TEST_DATA_PATH, bucket=bucket, args=args)
     batch_states,batch_acts, batch_goals, batch_colors = batch['obs'][:num_take, :40, :],batch['acts'][:num_take, :40, :], batch['goals'][:num_take, 0, :], [[0.8,0.8,0.8,0.6]]*num_take
@@ -165,19 +163,29 @@ def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cn
     initial_state = obs[:, 0, :]
     z_enc = encoder((obs,acts)).sample()
     z_plan = planner((initial_state, goals)).sample()
+    return z_enc, z_plan, colors, batch_colors
+
+
+
+def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True, for_live_plotting=False):
+    '''
+
+    Note: TODO Hard to have sufficient memory to do this in one pop - need to implement some batching logic for imgs
+    '''
+    z_enc, z_plan, colors, batch_colors = get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn, bucket)
     z_combined = tf.concat([z_enc, z_plan], axis = 0)
-  
     reducer.fit(z_combined)
     l = len(z_enc)
     z_embed = reducer.transform(z_combined)
-
     z_enc = z_embed[:l]
     z_plan = z_embed[l:]
+    fig_plan, scatter, ax_plan = project_labelled_latents(z_plan, colors + batch_colors, bucket)
 
-    fig_enc, scatter = project_labelled_latents(z_enc, colors + batch_colors, bucket)
-    fig_plan, scatter = project_labelled_latents(z_plan, colors + batch_colors, bucket)
-    
-    return fig_enc, fig_plan
+    if for_live_plotting:
+        return fig_plan, ax_plan, z_plan, colors
+    else:
+        fig_enc, scatter, _ = project_labelled_latents(z_enc, colors + batch_colors, bucket)
+        return fig_enc, fig_plan
 
 
 

@@ -199,7 +199,7 @@ def train_setup():
       cnn = None
 
     #optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
-    optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+    optimizer = tf.optimizers.Adam
     trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, trainer
 

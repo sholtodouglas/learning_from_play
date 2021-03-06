@@ -84,9 +84,9 @@ class LFPTrainer():
 
         if args.fp16:
             optimizer = mixed_precision.LossScaleOptimizer(optimizer)
-        self.actor_optimizer = optimizer # does this reuse the same optimizer object? Should we .copy()?
-        self.encoder_optimizer = optimizer
-        self.planner_optimizer = optimizer
+        self.actor_optimizer = optimizer(learning_rate=args.learning_rate)
+        self.encoder_optimizer = optimizer(learning_rate=args.learning_rate)
+        self.planner_optimizer = optimizer(learning_rate=args.learning_rate)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
