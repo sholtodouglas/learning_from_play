@@ -116,15 +116,6 @@
 - This notebook walks you through some pre-checks (it'll plot trajectory reconstructions to make sure the model's outputs make sense, and plot the latent space), then opens up the environment and has two ways of testing the environment. 1. By taking examples from the validation set, and initialising the environment to the first state and setting the final state as goal. 2. By resetting randomly, and using a 'test' class to generate goals from a predefined set (e.g, door left, block shelf). These goals will adjust the environment to ensure the test is valid (e.g, the door left test will make sure the door is on the right side of the cupboard).
 - The deploy notebook also does some of the tests which feature in our blog post. It uses the goal set testing method to load in different models and test them against a set of goals, it generates adversarial blocks to test robustness and it allows for save/replay of trajectories while displaying the latent space to visualise the plan sampling. 
 
-<!-- GETTING STARTED -->
-## Getting Started
-
-
-
-- To test a trained model, use the deploy notebook.
--	
-- Feel free to reach out with questions - if there is interest we'll write up more detailed instructions!
-
 
 <!-- LICENSE -->
 ## License
