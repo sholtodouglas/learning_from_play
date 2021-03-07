@@ -87,8 +87,8 @@
 ## About The Project
 <!-- ![Demo](media/demo.png) -->
 <p align="center">
-	<a href="https://sholtodouglas.github.io/images/play/with_latent4.gif">
-		<img src="media/with_latent4.gif">
+	<a href="https://sholtodouglas.github.io/images/play/headline.gif">
+		<img src="media/headline.gif">
 	</a>
 </p>
 
@@ -98,14 +98,31 @@
 * [Tensorflow 2](https://github.com/tensorflow/tensorflow)
 * [PyBullet](https://github.com/bulletphysics/bullet3/tree/master/examples/pybullet)
 
+# Data collection
+- There are two options here. 1. Full teleoperation in 'data_collection/vr_data_collection.py' 2. Scripted data collection (where it does some simple scripted commands, e.g top down block grasping, and door/drawer manipulation). Scripted data collection is a good way to test if the model can learn basic non-diverse motions, but a strong model needs teleoperated data - as a result only the teleoperated pathway is up to date, we last used scripted ~2 months ago and have not tested it since. 
+- To teleoperate, you'll need to set up pyBullet VR https://docs.google.com/document/d/1I4m0Letbkw4je5uIBxuCfhBcllnwKojJAyYSTjHbrH8/edit?usp=sharing, then run the 'App_PhysicsServer_SharedMemory_VR' executable you create in that process, then run 'data_collection/vr_data_collection.py'. The arm will track your controller, the main trigger will close the gripper and the secondary trigger will save the trajectory you have collected. We save 'full state' not images during data collection - because this allows us to determinstically reset the environment to that state and then collect images from any angle desired!
+- The npz files created during this process are converted to tf records using 'notebooks/Creating_tf_records'
+- This isn't the easiest of processes, so here is a link to the validation dataset https://drive.google.com/drive/folders/1AoN9grOONiO4tT12mXKvW1arB5suk7Bo?usp=sharing.
 
+# Training
+- To train a model on Colab, use  notebooks/train_lfp.ipynb, which will walk you through hardware specific setup (GCS/GDRIVE/Local and TPU/GPU), creating the dataloader and models, using the trainer class and logging to WandB or Comet. 
+- To train a model on GCP, follow 'useful_commands.md'. The first commands should be entered into GCP's console - then once your TPU instance is created use the GCP 'compute' pane to SSH in and follow the remaining steps (which clone the repo, install the dependencies and launch a basic deterministic model. Before training a model on GCP, you'll need to set up a GCS bucket to store data in and save model weights - the name of this bucket is defined at the top of 'useful_commands.md'. You'll see that we've created two buckets, one in Iowa (as Colab's TPUs are all hosted there) and one in Groningen (as our allocation of TFRC TPUs is hosted there).
+- Particular args which you may want to modify are: -tfr (looks for tfrecords in the data folder instead of npz, necessary for GCS), -i (images) -n (if not none, it makes the model probabilistic) 
+
+
+# Deploying
+- Once you've trained a model, download it into the 'saved_models' folder. 
+- Run the notebooks/deploy notebook with the same args defined in the first cell as you trained with. 
+- This notebook walks you through some pre-checks (it'll plot trajectory reconstructions to make sure the model's outputs make sense, and plot the latent space), then opens up the environment and has two ways of testing the environment. 1. By taking examples from the validation set, and initialising the environment to the first state and setting the final state as goal. 2. By resetting randomly, and using a 'test' class to generate goals from a predefined set (e.g, door left, block shelf). These goals will adjust the environment to ensure the test is valid (e.g, the door left test will make sure the door is on the right side of the cupboard).
+- The deploy notebook also does some of the tests which feature in our blog post. It uses the goal set testing method to load in different models and test them against a set of goals, it generates adversarial blocks to test robustness and it allows for save/replay of trajectories while displaying the latent space to visualise the plan sampling. 
 
 <!-- GETTING STARTED -->
 ## Getting Started
 
-- To train a model on Colab, use the train_lfp notebook
-- To train a model on GCP, use train_lfp.py, helpful TPU specific commands are in 'useful_commands.md'
-- To test a trained model, use the deploy notebook
+
+
+- To test a trained model, use the deploy notebook.
+-	
 - Feel free to reach out with questions - if there is interest we'll write up more detailed instructions!
 
 
