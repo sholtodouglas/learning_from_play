@@ -111,6 +111,7 @@
 
 
 # Deploying
+- Contact us if you'd like a pretrained model and we'll link you to the latest. 
 - Once you've trained a model, download it into the 'saved_models' folder. 
 - Run the notebooks/deploy notebook with the same args defined in the first cell as you trained with. 
 - This notebook walks you through some pre-checks (it'll plot trajectory reconstructions to make sure the model's outputs make sense, and plot the latent space), then opens up the environment and has two ways of testing the environment. 1. By taking examples from the validation set, and initialising the environment to the first state and setting the final state as goal. 2. By resetting randomly, and using a tester class to generate goals from a predefined set (e.g, door left, block shelf). These goals will adjust the environment to ensure the test is valid (e.g, the door left test will make sure the door is on the right side of the cupboard).
