@@ -1,4 +1,3 @@
-import attr
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization, ReLU, Input, LSTM, Concatenate, Masking, Reshape, Lambda, \
@@ -74,15 +73,13 @@ def create_planner(obs_dim, goal_dim, layer_size=2048, latent_dim=256):
     return Model([o_i, o_g], z)
 
 # Todo: add beta callback, add checkpointing callback, think about train=False autoregressive, what to do about masking?
-@attr.s(eq=False, repr=False)
 class LFPNet(Model):
-    encoder: Model = attr.ib()
-    planner: Model = attr.ib()
-    actor: Model = attr.ib()
-    beta: float = attr.ib()
-
-    def __attrs_post_init__(self) -> None:
+    def __init__(self, encoder, planner, actor, beta) -> None:
         super(LFPNet, self).__init__()
+        self.encoder = encoder
+        self.planner = planner
+        self.actor = actor
+        self.beta = beta
         self.total_loss_tracker = Mean(name="total_loss")
         self.action_loss_tracker = Mean(name="action_loss")
         self.reg_loss_tracker = Mean(name="reg_loss")
@@ -92,7 +89,7 @@ class LFPNet(Model):
             z = self.planner([inputs['obs'][:,0,:], inputs['goals'][:,0,:]])
         else:
             z = self.encoder([inputs['obs'], inputs['acts']])
-        z_tiled = tf.tile(tf.expand_dims(z, 1), (1, inputs['obs'].shape[1], 1))
+        z_tiled = tf.tile(tf.expand_dims(z[0], 1), (1, inputs['obs'].shape[1], 1))
         acts = self.actor([inputs['obs'], z_tiled, inputs['goals']])
         return acts, z
 
@@ -110,7 +107,9 @@ class LFPNet(Model):
         self.total_loss_tracker.update_state(loss)
         self.action_loss_tracker.update_state(act_loss)
         self.reg_loss_tracker.update_state(reg_loss)
-        return {m.name: m.result() for m in self.metrics}
+        result = {m.name: m.result() for m in self.metrics}
+        result['beta'] = self.beta
+        return result
 
     def test_step(self, inputs):
         acts_enc, z_enc = self(inputs, planner=False, training=False)
