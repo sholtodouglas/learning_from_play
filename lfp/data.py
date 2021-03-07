@@ -169,8 +169,8 @@ class PlayDataloader():
         if from_tfrecords:
             record_paths = []
             for p in paths:
-                record_paths = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_workers=1)
+                record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
+            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
