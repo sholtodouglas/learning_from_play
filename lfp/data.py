@@ -115,7 +115,6 @@ class PlayDataloader():
                 gripper_proprioception=False,
                 batch_size=32,
                 window_size=50,
-                min_window_size=20,
                 window_shift=1,
                 include_imgs=False,
                 shuffle_size=None, 
@@ -132,9 +131,7 @@ class PlayDataloader():
         
         self.batch_size = batch_size
         self.window_size = window_size
-        self.min_window_size = min_window_size
         self.window_shift = window_shift
-        self.variable_seqs = variable_seqs
         self.include_imgs = include_imgs
         self.shuffle_size = int(batch_size * (window_size / window_shift)) if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
@@ -173,7 +170,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_parallel_reads=1)
+            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_workers=1)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
@@ -223,11 +220,11 @@ class PlayDataloader():
             # Record the mean like we used to @Tristan
             raise NotImplementedError
         
-        return_dict = {'obs':obs, 
-                'acts':acts, 
-                'goals':dataset['achieved_goals'], # use this for the goal tiling on device
-                'dataset_path':dataset['sequence_id'],
-                'tstep_idxs':dataset['sequence_index']}
+        return_dict = {'obs': obs,
+                'acts': acts,
+                'goals': dataset['achieved_goals'], # use this for the goal tiling on device
+                'dataset_path': dataset['sequence_id'],
+                'tstep_idxs': dataset['sequence_index']}
 
         if self.include_imgs:
             return_dict['imgs'] = dataset['img'] # use this for the goal tiling on device
@@ -250,7 +247,7 @@ class PlayDataloader():
         :return:
         """
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
-        seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
+        seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['dataset_path'])).y), 1)
         dataset = (dataset
                     .map(self.transform, num_parallel_calls=self.num_workers)
                     .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)
