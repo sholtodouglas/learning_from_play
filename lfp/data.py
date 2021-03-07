@@ -84,14 +84,14 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, include_imgs=False, ordered=True, num_parallel_reads=1):
+def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # must be 1 to maintain order while streaming from GCS
 
-    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_parallel_reads)
+    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=1)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_parallel_reads)
+    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_workers)
     return dataset
 
 
@@ -117,7 +117,6 @@ class PlayDataloader():
                 window_size=50,
                 min_window_size=20,
                 window_shift=1,
-                variable_seqs=True, 
                 include_imgs=False,
                 shuffle_size=None, 
                 num_workers=tf.data.experimental.AUTOTUNE,
@@ -152,15 +151,6 @@ class PlayDataloader():
         minutes = secs // 60 - hours * 60
         print(f"{dataset_size} frames, which is {hours:.0f}hrs {minutes:.0f}m.")
 
-    def create_goal_tensor(self, dataset, tensor='achieved_goals', seq_len=-1):
-        ''' Tile final achieved_goal across time dimension '''
-        if tensor == 'img':
-            tile_dims = tf.constant([self.window_size, 1,1,1], tf.int32)
-        else:
-            tile_dims = tf.constant([self.window_size, 1], tf.int32)
-        goal = tf.tile(dataset[tensor][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
-        return goal
-
     def validate_action_label(self, acts):
         if self.quaternion_act or self.joints:
             raise tf.errors.NotImplementedError
@@ -182,7 +172,7 @@ class PlayDataloader():
         if from_tfrecords:
             record_paths = []
             for p in paths:
-                record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
+                record_paths = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
             dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_parallel_reads=1)
         else:
             dataset = extract_npz(paths)
@@ -196,33 +186,28 @@ class PlayDataloader():
         :param dataset:
         :return:
         """
-        # Action limit validation
-        self.validate_action_label(dataset['acts'])
-
         # State representations
         obs = dataset['obs']
-
         
         # act in joint space
         if self.joints:
-            obs = tf.concat([obs,dataset['joint_poses'][:,:7]], axis=-1)
+            obs = tf.concat([obs,dataset['joint_poses'][:7]], axis=-1)
             acts = dataset['target_poses']
             if self.relative_act:
-                acts = acts - dataset['joint_poses'][:,:6]
-
+                acts = acts - dataset['joint_poses'][:6]
         # act in position space with quaternions
         elif self.quaternion_act:
-                acts = dataset['acts_quat'][:,:7]
+                acts = dataset['acts_quat'][:7]
                 if self.relative_act:
-                    acts = acts  - dataset['obs_quat'][:,:7]
+                    acts = acts - dataset['obs_quat'][:7]
         # act in rpy position space            
         else:
-            acts = dataset['acts'][:,:6]
+            acts = dataset['acts'][:6]
             if self.relative_act:
-                acts = acts - dataset['obs'][:,:6]
+                acts = acts - dataset['obs'][:6]
                 
         # add the gripper on the end
-        gripper = dataset['acts'][:,-1,tf.newaxis]
+        gripper = dataset['acts'][-1,tf.newaxis]
         acts = tf.concat([acts, gripper], axis=-1)
 
         if self.relative_obs:
@@ -231,28 +216,7 @@ class PlayDataloader():
             obs = tf.concat([obs, dataset['velocities']], axis=-1)
         if self.gripper_proprioception:
             obs = tf.concat([obs, dataset['proprioception']], axis=-1)
-            
-        # Variable Seq len
-        if self.variable_seqs:
-            seq_len = tf.random.uniform(shape=[], minval=self.min_window_size, 
-                                        maxval=self.window_size, dtype=tf.int32, seed=self.seed)
-            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
-            # Masking
-            mask = tf.cast(tf.sequence_mask(seq_len, maxlen=self.window_size), tf.float32) # creates a B*T mask
-            multiply_mask = tf.expand_dims(mask, -1)
 
-            obs *= multiply_mask
-            goals *= multiply_mask
-            acts *= multiply_mask
-        else:
-            seq_len = self.window_size
-            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
-          
-        # # Key data dimensions
-        # self.obs_dim = obs.shape[1]
-        # self.goal_dim = goals.shape[1]
-        # self.act_dim = acts.shape[1]
-        
         # Preprocessing
         # TODO: make this static normalization by some constant
         if self.normalize:
@@ -261,30 +225,24 @@ class PlayDataloader():
         
         return_dict = {'obs':obs, 
                 'acts':acts, 
-                'goals':goals, 
-                'seq_lens': tf.cast(seq_len, tf.float32), 
-                'masks':mask, 
-                'dataset_path':dataset['sequence_id'], 
+                'goals':dataset['achieved_goals'], # use this for the goal tiling on device
+                'dataset_path':dataset['sequence_id'],
                 'tstep_idxs':dataset['sequence_index']}
 
         if self.include_imgs:
-            return_dict['imgs'] = dataset['img']
-            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'img', seq_len)
-            if self.variable_seqs:
-                # Here is a nice micro optimisation - by keeping imgs int in the dataloader we make our calls to dataloader 3x faster
-                # and can keep the /255 step in the cnn intself, which removes a source of error in deployment of the model
-                imgs_mask = tf.cast(multiply_mask, tf.uint8)[:,:,tf.newaxis, tf.newaxis] # Must be 4 dim because the imgs are T, H, W, C
-                return_dict['imgs'] *= imgs_mask
-                return_dict['goal_imgs'] *= imgs_mask
+            return_dict['imgs'] = dataset['img'] # use this for the goal tiling on device
             # Proprioceptive features are xyz, rpy, gripper angle
             return_dict['proprioceptive_features'] = obs[:,:7]
-            
 
         # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
-    
-    # TODO: why did we not need this before?? window_lambda is being weird
-    # @tf.autograph.experimental.do_not_convert
+
+    # Note: main reasons the dataloader was slow before are:
+    # - mapping transform after windowing (we want it ideally before)
+    # - var seq lens and goal tiling are computationally expensive (we ought to do on device)
+    # - single-threaded tfrecords mapper (NOT the IO)
+    # - action validation also taxing, it could be risky removing but it's also too slow. We should validate our
+    #   data once off beforehand. Todo: write a data validator
     def load(self, dataset):
         """
 
@@ -293,15 +251,14 @@ class PlayDataloader():
         """
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
         seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
-        dataset = dataset\
-                .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)\
-                .flat_map(window_lambda)\
-                .filter(seq_overlap_filter)\
-                .shuffle(self.shuffle_size)\
-                .repeat()\
-                .map(self.transform, num_parallel_calls=self.num_workers)\
-                .batch(self.batch_size, drop_remainder=True)\
-                .prefetch(self.prefetch_size)
+        dataset = (dataset
+                    .map(self.transform, num_parallel_calls=self.num_workers)
+                    .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)
+                    .flat_map(window_lambda)
+                    .filter(seq_overlap_filter) # Todo: optimise this/remove if possible
+                    .shuffle(self.shuffle_size)
+                    .batch(self.batch_size, drop_remainder=True)
+                    .prefetch(self.prefetch_size))
 
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
