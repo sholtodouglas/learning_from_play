@@ -85,7 +85,7 @@ class LFPTrainer():
         if args.fp16:
             optimizer = mixed_precision.LossScaleOptimizer(optimizer)
 
-        if self.actor.num_distribs is None: # different sized clips due to different sized losses
+        if self.args.num_distribs is None: # different sized clips due to different sized losses
             actor_clip  = 0.06
             encoder_clip = 0.03
             planner_clip = 0.001
