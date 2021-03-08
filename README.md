@@ -102,7 +102,7 @@
 - There are two options here. 1. Full teleoperation in 'data_collection/vr_data_collection.py' 2. Scripted data collection (where it does some simple scripted commands, e.g top down block grasping, and door/drawer manipulation). Scripted data collection is a good way to test if the model can learn basic non-diverse motions, but a strong model needs teleoperated data - as a result only the teleoperated pathway is up to date, we last used scripted ~2 months ago and have not tested it since. 
 - To teleoperate, you'll need to set up pyBullet VR https://docs.google.com/document/d/1I4m0Letbkw4je5uIBxuCfhBcllnwKojJAyYSTjHbrH8/edit?usp=sharing, then run the 'App_PhysicsServer_SharedMemory_VR' executable you create in that process, then run 'data_collection/vr_data_collection.py'. The arm will track your controller, the main trigger will close the gripper and the secondary trigger will save the trajectory you have collected. We save 'full state' not images during data collection - because this allows us to determinstically reset the environment to that state and then collect images from any angle desired!
 - The npz files created during this process are converted to tf records using 'notebooks/Creating_tf_records'
-- This isn't the easiest of processes, so here is a link to the validation dataset https://drive.google.com/drive/folders/1AoN9grOONiO4tT12mXKvW1arB5suk7Bo?usp=sharing.
+- This isn't the easiest of processes, so here is a link to the validation dataset https://drive.google.com/drive/folders/1AoN9grOONiO4tT12mXKvW1arB5suk7Bo?usp=sharing. Contact us for the training dataset - we'd be interested in chatting ideas on what to do!
 
 # Training
 - To train a model on Colab, use  notebooks/train_lfp.ipynb, which will walk you through hardware specific setup (GCS/GDRIVE/Local and TPU/GPU), creating the dataloader and models, using the trainer class and logging to WandB or Comet. 
@@ -111,9 +111,9 @@
 
 
 # Deploying
-- Contact us if you'd like a pretrained model and we'll link you to the latest. 
-- Once you've trained a model, download it into the 'saved_models' folder. 
-- Run the notebooks/deploy notebook with the same args defined in the first cell as you trained with. 
+- Pretrained model https://drive.google.com/drive/folders/11nwcfXqc0n7Ava2sSCKHcCjJPn52RV7t?usp=sharing
+- Once you've trained or donwloaded a model, download it into the 'saved_models' folder. 
+- Run the notebooks/deploy notebook with the same args defined in the first cell as you trained with. (The default args are for the one downloadable above, critically, -n 5, -la 2048, -le 512, -lp 512. 
 - This notebook walks you through some pre-checks (it'll plot trajectory reconstructions to make sure the model's outputs make sense, and plot the latent space), then opens up the environment and has two ways of testing the environment. 1. By taking examples from the validation set, and initialising the environment to the first state and setting the final state as goal. 2. By resetting randomly, and using a tester class to generate goals from a predefined set (e.g, door left, block shelf). These goals will adjust the environment to ensure the test is valid (e.g, the door left test will make sure the door is on the right side of the cupboard).
 - The deploy notebook also does some of the tests which feature in our blog post. It uses the goal set testing method to load in different models and test them against a set of goals, it generates adversarial blocks to test robustness and it allows for save/replay of trajectories while displaying the latent space to visualise the plan sampling. 
 
