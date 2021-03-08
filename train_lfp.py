@@ -280,8 +280,9 @@ while t < args.train_steps:
     train(train_dist_dataset, beta)
 
     if t % valid_inc == 0:
-        test(valid_dist_dataset, beta)
         step_time = round(time.time() - start_time, 1)
+        test(valid_dist_dataset, beta)
+        
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
         metrics['step_time'] = step_time
@@ -297,7 +298,7 @@ while t < args.train_steps:
 
     if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-        if not args.gcbc and not args.images:
+        if not args.gcbc:
           z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
           #Comet

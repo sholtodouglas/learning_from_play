@@ -84,9 +84,19 @@ class LFPTrainer():
 
         if args.fp16:
             optimizer = mixed_precision.LossScaleOptimizer(optimizer)
-        self.actor_optimizer = optimizer(learning_rate=args.learning_rate)
-        self.encoder_optimizer = optimizer(learning_rate=args.learning_rate)
-        self.planner_optimizer = optimizer(learning_rate=args.learning_rate)
+
+        if self.args.num_distribs is None: # different sized clips due to different sized losses
+            actor_clip  = 0.06
+            encoder_clip = 0.03
+            planner_clip = 0.001
+        else:
+            actor_clip = 400
+            encoder_clip = 5
+            planner_clip = 0.4
+
+        self.actor_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=actor_clip)
+        self.encoder_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
+        self.planner_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=planner_clip)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)

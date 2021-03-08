@@ -145,6 +145,19 @@ def project_labelled_latents(z_embed, colors, bucket=True, figsize=(14,14)):
     plt.axis('off')
     return fig,scatter, ax
 
+# def process_batchsize_at_a_time(function, batch_size, batch_imgs=None, batch_proprioceptive_features=None, batch_goal_imgs=None\
+#                                 cnn=None, obs=None, acts=None, intital_state=None, goals=None):
+#     fullsize = len(args[0])
+#     indices = list(np.arange(0, fullsize, batch_size))+[fullsize]
+#     return_vals []
+#     for i in range(0, len(indices)-1):
+#         start, stop = indicies[i], indices[i+1]
+#         if cnn is not None:
+#             return_vals.append(function(imgs[start:stop], proprioceptive_features[start:stop], goals_imgs[start:end], cnn]))
+#         return_vals.append(func(*args))
+#         print(indices[i], indices[i+1])
+
+
 def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
     '''
     Separating this out for reuse in live model display 
@@ -154,8 +167,17 @@ def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn
 
     if args.images:
         batch_imgs, batch_proprioceptive_features, batch_goal_imgs = batch['imgs'][:num_take, :40, :], batch['proprioceptive_features'][:num_take, :40, :], batch['goal_imgs'][:num_take, 0, :]
+        
         batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
-        obs, goals = lfp.utils.images_to_2D_features(imgs, proprioceptive_features, goal_imgs, cnn)
+        # do this so that we can fit it all in memory
+        indices = list(np.arange(0, len(imgs), len(batch_states)))+[len(imgs)]
+        obs_stack, goal_stack = [],[]
+        for i in range(0, len(indices)-1):
+            start, stop = indices[i], indices[i+1]
+            obs, goals = lfp.utils.images_to_2D_features(imgs[start:stop], proprioceptive_features[start:stop], goal_imgs[start:stop], cnn)
+            obs_stack.append(obs), goal_stack.append(goals)
+        obs, goals = tf.concat(obs_stack, 0), tf.concat(goal_stack, 0)
+
 
     obs  = np.concatenate([obs, batch_states])
     acts = np.concatenate([acts, batch_acts])
