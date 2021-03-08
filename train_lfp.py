@@ -280,8 +280,9 @@ while t < args.train_steps:
     train(train_dist_dataset, beta)
 
     if t % valid_inc == 0:
-        test(valid_dist_dataset, beta)
         step_time = round(time.time() - start_time, 1)
+        test(valid_dist_dataset, beta)
+        
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
         metrics['step_time'] = step_time
