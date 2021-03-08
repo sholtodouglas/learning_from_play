@@ -296,10 +296,10 @@ while t < args.train_steps:
         # Plot on WandB
         wandb.log(metrics, step=t)
 
-    if (t+1) % save_inc == 0:
+    if (t) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
         if not args.gcbc:
-          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=args.batch_size)
 
           #Comet
 #           experiment.log_figure('z_enc', z_enc, step=t)
