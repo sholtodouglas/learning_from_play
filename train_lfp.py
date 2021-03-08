@@ -302,8 +302,8 @@ while t < args.train_steps:
           z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
           #Comet
-          experiment.log_figure('z_enc', z_enc, step=t)
-          experiment.log_figure('z_plan', z_plan,step=t)
+#           experiment.log_figure('z_enc', z_enc, step=t)
+#           experiment.log_figure('z_plan', z_plan,step=t)
 
           # WandB
           wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
