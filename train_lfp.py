@@ -156,7 +156,6 @@ else:
 # # Dataset
 
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
-print(f'Global batch size {GLOBAL_BATCH_SIZE}')
 dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
 
 # Train data
@@ -279,9 +278,12 @@ while t < args.train_steps:
     beta = beta_sched.scheduler(t)
     train(train_dist_dataset, beta)
 
+    print('Stepped')
+
     if t % valid_inc == 0:
         step_time = round(time.time() - start_time, 1)
         test(valid_dist_dataset, beta)
+        print('Tested')
         
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
@@ -291,13 +293,17 @@ while t < args.train_steps:
         progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
                                 ('Validation Loss', metrics['valid_loss']),
                                 ('Time (s)', step_time)])
+        print('logged')
         #Plot on Comet
         experiment.log_metrics(metrics,step=t)
+        print('comet')
         # Plot on WandB
         wandb.log(metrics, step=t)
+        print('wandb')
 
     if (t) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
+        print('saved')
         if not args.gcbc or args.images:
           z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=args.batch_size)
 
