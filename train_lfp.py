@@ -156,7 +156,7 @@ else:
 # # Dataset
 
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
-
+print(f'Global batch size {GLOBAL_BATCH_SIZE}')
 dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
 
 # Train data
