@@ -16,4 +16,5 @@ tqdm
 umap-learn
 scikit-learn
 imageio
+ipython
 -e git+https://github.com/sholtodouglas/RoboticsPlayroomPybullet

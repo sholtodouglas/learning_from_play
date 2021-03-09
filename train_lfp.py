@@ -6,6 +6,7 @@
 
 # In[20]:
 # import comet_ml at the top of your file
+import pathlib
 from comet_ml import Experiment
 import wandb
 wandb.login()
@@ -121,8 +122,10 @@ else:
     STORAGE_PATH = WORKING_PATH
 
 print(f'Storage path: {STORAGE_PATH}')
-TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
-TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
+# TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
+# TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
+TRAIN_DATA_PATHS = [pathlib.Path(STORAGE_PATH).joinpath('data', x) for x in args.train_datasets]
+TEST_DATA_PATHS = [pathlib.Path(STORAGE_PATH).joinpath('data', x) for x in args.test_datasets]
 
 
 # # Data Creation
@@ -277,6 +280,9 @@ def test(valid_dataset, beta):
 while t < args.train_steps:
     start_time = time.time()
     beta = beta_sched.scheduler(t)
+
+    # uncomment to allow debugging within tensorflow with pdb.set_trace()
+    # tf.config.run_functions_eagerly(True)
     train(train_dist_dataset, beta)
 
     if t % valid_inc == 0:

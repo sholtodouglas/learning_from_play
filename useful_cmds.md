@@ -107,3 +107,9 @@ PROB_IM_BIGPLAN_B0_03 \
 -n 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
+
+# Running Locally
+
+```
+python train_lfp.py test_run --train_dataset UR5 UR5_slow_gripper UR5_high_transition --test_dataset UR5_slow_gripper_test -s LOCAL -d CPU -b 8 -la 2048 -le 512 -lp 512 -z 256 -lr 3e-4 -B 0.0
+```

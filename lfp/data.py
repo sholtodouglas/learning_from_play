@@ -65,9 +65,9 @@ def extract_npz(paths):
     dataset = {k: [] for k in keys + ['sequence_index', 'sequence_id']}
 
     for path in paths:
-        obs_act_path = os.path.join(path, 'obs_act_etc/')
+        obs_act_path = os.path.join(path, 'obs_act_etc')
         for demo in tqdm(natsorted(os.listdir(obs_act_path)), desc=path.name):
-            traj = np.load(obs_act_path + demo + '/data.npz')
+            traj = np.load(os.path.join(obs_act_path, demo, 'data.npz'))
             for k in keys:
                 d = traj[k]
                 if len(d.shape) < 2:

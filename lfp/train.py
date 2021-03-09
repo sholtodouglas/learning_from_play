@@ -178,6 +178,7 @@ class LFPTrainer():
             encoding = self.encoder([states, actions])
             plan = self.planner([states[:, 0, :], goals[:, 0,
                                                   :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
+
             z_enc = encoding.sample()
             z_plan = plan.sample()
             z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
