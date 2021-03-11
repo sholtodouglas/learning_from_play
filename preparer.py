@@ -10,27 +10,22 @@ import lfp
 from lfp.model_v2 import create_actor, create_encoder, create_planner, LFPNet
 
 
-class Preparer:
-
-    STORAGE_PATH: Path
-    TRAIN_DATA_PATHS: List[Path]
-    TEST_DATA_PATHS: List[Path]
-
-    NUM_DEVICES: int
-
-    GLOBAL_BATCH_SIZE: int
+class PrepArgs:
 
     args: argparse.Namespace
-    dataloader: lfp.data.PlayDataloader
-    device_strategy: tf.distribute.Strategy
 
-    beta_schedule: lfp.train.BetaScheduler
-    checkpoint_callback: tf.keras.callbacks.ModelCheckpoint
+    def __init__(self, args_str=""):
 
-    def __init__(self):
-        self.args = None
+        self._parse_args(args_str)
 
-    def add_args(self, args_str=""):
+    # forward attribute accesses to args, so this object can be used in place of args
+    def __getattr__(self, attr):
+        return getattr(self.args, attr)
+
+    def __repr__(self) -> str:
+        return repr(self.args)
+
+    def _parse_args(self, args_str):
 
         parser = argparse.ArgumentParser(description="LFP training arguments")
         parser.add_argument("run_name")
@@ -130,17 +125,21 @@ class Preparer:
 
         self.args = parser.parse_args(args_str.split())
 
-        return self.args
 
-    def init_data_paths(self):
+class PrepPaths:
 
+    STORAGE_PATH: Path
+    TRAIN_DATA_PATHS: List[Path]
+    TEST_DATA_PATHS: List[Path]
+
+    def __init__(self, args: PrepArgs):
         # todo: pathy doesn't work nicely with windows, pathlib probably won't work nicely with buckets (haven't tried yet)
 
-        if self.args.data_source == "DRIVE":
-            assert self.args.colab, "Must be using Colab"
+        if args.data_source == "DRIVE":
+            assert args.colab, "Must be using Colab"
             print("Reading data from Google Drive")
             self.STORAGE_PATH = Path("/content/drive/My Drive/Robotic Learning")
-        elif self.args.data_source == "GCS":
+        elif args.data_source == "GCS":
             raise NotImplementedError()
             # from colab import auth
             # import requests
@@ -162,20 +161,27 @@ class Preparer:
 
         print(f"Storage path: {self.STORAGE_PATH}")
         self.TRAIN_DATA_PATHS = [
-            self.STORAGE_PATH.joinpath("data", x) for x in self.args.train_datasets
+            self.STORAGE_PATH.joinpath("data", x) for x in args.train_datasets
         ]
         self.TEST_DATA_PATHS = [
-            self.STORAGE_PATH.joinpath("data", x) for x in self.args.test_datasets
+            self.STORAGE_PATH.joinpath("data", x) for x in args.test_datasets
         ]
 
-    def init_devices(self):
+
+class PrepDevices:
+
+    NUM_DEVICES: int
+
+    device_strategy: tf.distribute.Strategy
+
+    def __init__(self, args: PrepArgs):
 
         print("Tensorflow version " + tf.__version__)
 
-        if self.args.device == "TPU":
+        if args.device == "TPU":
             try:
                 tpu = tf.distribute.cluster_resolver.TPUClusterResolver(
-                    tpu=self.args.tpu_name
+                    tpu=args.tpu_name
                 )  # TPU detection
                 print("Running on TPU ", tpu.cluster_spec().as_dict()["worker"])
             except ValueError:
@@ -185,90 +191,143 @@ class Preparer:
 
             tf.config.experimental_connect_to_cluster(tpu)
             tf.tpu.experimental.initialize_tpu_system(tpu)
-            self.strategy = tf.distribute.TPUStrategy(tpu)
-            self.NUM_DEVICES = self.strategy.num_replicas_in_sync
+            self.device_strategy = tf.distribute.TPUStrategy(tpu)
+            self.NUM_DEVICES = self.device_strategy.num_replicas_in_sync
             print("REPLICAS: ", self.NUM_DEVICES)
-            if self.args.fp16:
+            if args.fp16:
                 tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
         else:
             physical_devices = tf.config.list_physical_devices()
-            if self.args.device == "GPU":
+            if args.device == "GPU":
                 tf.config.experimental.set_memory_growth(
                     physical_devices[3], enable=True
                 )
-                if self.args.fp16:
+                if args.fp16:
                     tf.keras.mixed_precision.set_global_policy("mixed_float16")
-            self.strategy = tf.distribute.get_strategy()
+            self.device_strategy = tf.distribute.get_strategy()
             self.NUM_DEVICES = 1
             print(physical_devices)
 
-    def init_dataloaders(self):
 
-        self.GLOBAL_BATCH_SIZE = self.args.batch_size * self.NUM_DEVICES
+class PrepDataloader:
+
+    GLOBAL_BATCH_SIZE: int
+
+    dataloader: lfp.data.PlayDataloader
+    train_dataset: tf.data.Dataset
+    valid_dataset: tf.data.Dataset
+
+    def __init__(self, args: PrepArgs, paths: PrepPaths, num_devices: int):
+
+        self.GLOBAL_BATCH_SIZE = args.batch_size * num_devices
         self.dataloader = lfp.data.PlayDataloader(
-            include_imgs=self.args.images,
+            include_imgs=args.images,
             batch_size=self.GLOBAL_BATCH_SIZE,
-            window_size=self.args.window_size_max,
-            min_window_size=self.args.window_size_min,
+            window_size=args.window_size_max,
+            min_window_size=args.window_size_min,
         )
 
         # Train data
         train_data = self.dataloader.extract(
-            self.TRAIN_DATA_PATHS, from_tfrecords=self.args.from_tfrecords
+            paths.TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords
         )
-        train_dataset = self.dataloader.load(train_data)
+        self.train_dataset = self.dataloader.load(train_data)
 
         # Validation data
         valid_data = self.dataloader.extract(
-            self.TEST_DATA_PATHS, from_tfrecords=self.args.from_tfrecords
+            paths.TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords
         )
-        valid_dataset = self.dataloader.load(valid_data)
+        self.valid_dataset = self.dataloader.load(valid_data)
 
-    def create_model(self, debug=False):
+    def dims_dict(self):
+        return {
+            "obs_dim": self.dataloader.obs_dim,
+            "act_dim": self.dataloader.act_dim,
+            "goal_dim": self.dataloader.goal_dim,
+        }
 
-        with self.strategy.scope():
+
+class PrepModel:
+
+    model: LFPNet
+
+    def __init__(
+        self,
+        args: PrepArgs,
+        device_strategy: tf.distribute.Strategy,
+        obs_dim: int,
+        act_dim: int,
+        goal_dim: int,
+        debug=False,
+    ):
+
+        with device_strategy.scope():
 
             actor = create_actor(
-                obs_dim=self.dataloader.obs_dim,
-                act_dim=self.dataloader.act_dim,
-                goal_dim=self.dataloader.goal_dim,
-                layer_size=self.args.actor_layer_size,
-                latent_dim=self.args.latent_dim,
+                obs_dim=obs_dim,
+                act_dim=act_dim,
+                goal_dim=goal_dim,
+                layer_size=args.actor_layer_size,
+                latent_dim=args.latent_dim,
             )
             encoder = create_encoder(
-                obs_dim=self.dataloader.obs_dim,
-                act_dim=self.dataloader.act_dim,
-                layer_size=self.args.encoder_layer_size,
-                latent_dim=self.args.latent_dim,
+                obs_dim=obs_dim,
+                act_dim=act_dim,
+                layer_size=args.encoder_layer_size,
+                latent_dim=args.latent_dim,
             )
             planner = create_planner(
-                obs_dim=self.dataloader.obs_dim,
-                goal_dim=self.dataloader.goal_dim,
-                layer_size=self.args.encoder_layer_size,
-                latent_dim=self.args.latent_dim,
+                obs_dim=obs_dim,
+                goal_dim=goal_dim,
+                layer_size=args.encoder_layer_size,
+                latent_dim=args.latent_dim,
             )
 
-            model = LFPNet(encoder, planner, actor, beta=self.args.beta)
+            self.model = LFPNet(encoder, planner, actor, beta=args.beta)
 
-            optimizer = tf.keras.optimizers.Adam(self.args.learning_rate)
+            optimizer = tf.keras.optimizers.Adam(args.learning_rate)
 
-            model.compile(
+            self.model.compile(
                 optimizer=optimizer,
                 loss="mae",
                 steps_per_execution=1,
                 run_eagerly=debug,
             )
 
-    def init_model_utils(self):
+
+class PrepUtils:
+
+    beta_schedule: lfp.train.BetaScheduler
+    checkpoint_callback: tf.keras.callbacks.ModelCheckpoint
+
+    def __init__(self, args: PrepArgs, storage_path: Path):
 
         self.beta_schedule = lfp.train.BetaScheduler(
-            "constant", beta_max=self.args.beta
+            "constant", beta_max=args.beta
         )
 
         self.checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath=self.STORAGE_PATH.joinpath("saved_models"),
+            filepath=storage_path.joinpath("saved_models"),
             monitor="val_total_loss",
             save_best_only=True,
             save_weights_only=False,
             save_freq=1000,
         )
+
+
+class Preparer:
+
+    args: PrepArgs
+    paths: PrepPaths
+    devices: PrepDevices
+    dataloader: PrepDataloader
+    model: PrepModel
+    utils: PrepUtils
+
+    def __init__(self):
+        self.args = None
+        self.paths = None
+        self.devices = None
+        self.dataloader = None
+        self.model = None
+        self.utils = None

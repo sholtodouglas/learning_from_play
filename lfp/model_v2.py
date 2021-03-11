@@ -7,6 +7,7 @@ import tensorflow_probability as tfp
 tfd = tfp.distributions
 tfb = tfp.bijectors
 tfpl = tfp.layers
+from lfp.metric import MaxMetric
 
 ACT_LIMITS = tf.constant([1.5, 1.5, 2.2, 3.2, 3.2, 3.2, 1.1])
 
@@ -94,9 +95,9 @@ class LFPNet(Model):
         self.beta_metric = tf.keras.metrics.Mean(name='beta')
 
         self.valid_position_loss = tf.keras.metrics.Mean(name='valid_position_loss')
-        self.valid_max_position_loss = lfp.metric.MaxMetric(name='valid_max_position_loss')
+        self.valid_max_position_loss = MaxMetric(name='valid_max_position_loss')
         self.valid_rotation_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
-        self.valid_max_rotation_loss = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
+        self.valid_max_rotation_loss = MaxMetric(name='valid_max_rotation_loss')
         self.valid_gripper_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
     def call(self, inputs, planner=True, training=False):
