@@ -5,6 +5,7 @@ from pathlib import Path
 import logging
 
 import tensorflow as tf
+import wandb
 
 import lfp
 from lfp.model_v2 import create_actor, create_encoder, create_planner, LFPNet
@@ -124,6 +125,13 @@ class PrepArgs:
         )  # Only used in the script on GCP
 
         self.args = parser.parse_args(args_str.split())
+
+class PrepDashboard:
+
+    def __init__(self, args: PrepArgs):
+
+        wandb.login()
+        wandb.init(project="learning-from-play_v2")
 
 
 class PrepPaths:
@@ -318,6 +326,7 @@ class PrepUtils:
 class Preparer:
 
     args: PrepArgs
+    dashboard: PrepDashboard
     paths: PrepPaths
     devices: PrepDevices
     dataloader: PrepDataloader
@@ -331,3 +340,8 @@ class Preparer:
         self.dataloader = None
         self.model = None
         self.utils = None
+
+    def set_max_notebook_output_height(self, heightEM):
+
+        from IPython.core.display import display, HTML
+        display(HTML(f"<style>div.output_scroll {{ max-height: {heightEM}em; }}</style>"))
