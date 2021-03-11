@@ -73,6 +73,7 @@ def create_planner(obs_dim, goal_dim, layer_size=2048, latent_dim=256):
     return Model([o_i, o_g], z)
 
 # Todo: add beta callback, add checkpointing callback, think about train=False autoregressive, what to do about masking?
+# Account for probabilistic (need to sample the actions to get MAE)
 class LFPNet(Model):
     def __init__(self, encoder, planner, actor, beta) -> None:
         super(LFPNet, self).__init__()
@@ -80,9 +81,23 @@ class LFPNet(Model):
         self.planner = planner
         self.actor = actor
         self.beta = beta
-        self.total_loss_tracker = Mean(name="total_loss")
-        self.action_loss_tracker = Mean(name="action_loss")
-        self.reg_loss_tracker = Mean(name="reg_loss")
+        self.train_loss = tf.keras.metrics.Mean(name='train_loss')
+        self.valid_loss = tf.keras.metrics.Mean(name='valid_loss')
+
+        self.train_act_with_enc_loss = tf.keras.metrics.Mean(name='train_act_with_enc_loss')
+        self.train_act_with_plan_loss = tf.keras.metrics.Mean(name='train_act_with_plan_loss')
+        self.valid_act_with_enc_loss = tf.keras.metrics.Mean(name='valid_act_with_enc_loss')
+        self.valid_act_with_plan_loss = tf.keras.metrics.Mean(name='valid_act_with_plan_loss')
+
+        self.train_reg_loss = tf.keras.metrics.Mean(name='reg_loss')
+        self.valid_reg_loss = tf.keras.metrics.Mean(name='valid_reg_loss')
+        self.beta_metric = tf.keras.metrics.Mean(name='beta')
+
+        self.valid_position_loss = tf.keras.metrics.Mean(name='valid_position_loss')
+        self.valid_max_position_loss = lfp.metric.MaxMetric(name='valid_max_position_loss')
+        self.valid_rotation_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
+        self.valid_max_rotation_loss = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
+        self.valid_gripper_loss = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
     def call(self, inputs, planner=True, training=False):
         if planner:
@@ -97,16 +112,23 @@ class LFPNet(Model):
         with tf.GradientTape() as tape:
             acts_enc, z_enc = self(inputs, planner=False, training=True)
             acts_plan, z_plan = self(inputs, planner=True, training=True)
-            act_loss = self.compiled_loss(inputs['acts'], acts_enc, regularization_losses=self.losses)
+            act_enc_loss = self.compiled_loss(inputs['acts'], acts_enc, regularization_losses=self.losses)
+            act_plan_loss = self.compiled_loss(inputs['acts'], acts_plan, regularization_losses=self.losses)
+
             reg_loss = tfd.kl_divergence(z_enc, z_plan)
-            loss = act_loss + self.beta * reg_loss
+            loss = act_enc_loss + self.beta * reg_loss
 
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        # Update metrics (includes the metric that tracks the loss)
-        self.total_loss_tracker.update_state(loss)
-        self.action_loss_tracker.update_state(act_loss)
-        self.reg_loss_tracker.update_state(reg_loss)
+
+        
+        # Update metrics 
+        self.train_loss.update_state(loss)
+        self.train_act_with_enc_loss.update_state(act_enc_loss)
+        self.train_act_with_plan_loss.update_state(act_plan_loss)
+        self.train_reg_loss.update_state(reg_loss)
+        self.beta_metric.update_state(self.beta)
+
         result = {m.name: m.result() for m in self.metrics}
         result['beta'] = self.beta
         return result
@@ -114,20 +136,39 @@ class LFPNet(Model):
     def test_step(self, inputs):
         acts_enc, z_enc = self(inputs, planner=False, training=False)
         acts_plan, z_plan = self(inputs, planner=True, training=False)
-        act_loss = self.compiled_loss(inputs['acts'], acts_plan, regularization_losses=self.losses)
-        reg_loss = tfd.kl_divergence(z_enc, z_plan)
-        loss = act_loss + self.beta * reg_loss
+        act_enc_loss = self.compiled_loss(inputs['acts'], acts_enc, regularization_losses=self.losses)
+        act_plan_loss = self.compiled_loss(inputs['acts'], acts_plan, regularization_losses=self.losses)
 
-        # Update metrics (includes the metric that tracks the loss)
-        self.total_loss_tracker.update_state(loss)
-        self.action_loss_tracker.update_state(act_loss)
-        self.reg_loss_tracker.update_state(reg_loss)
+        reg_loss = tfd.kl_divergence(z_enc, z_plan)
+        loss = act_plan_loss + self.beta * reg_loss
+
+        # Update metrics 
+        self.valid_loss.update_state(loss)
+        self.valid_act_with_enc_loss.update_state(act_enc_loss)
+        self.valid_act_with_plan_loss.update_state(act_plan_loss)
+        self.valid_reg_loss.update_state(reg_loss)
+
         return {m.name: m.result() for m in self.metrics}
 
     @property
     def metrics(self):
+        # We list our `Metric` objects here so that `reset_states()` can be
+        # called automatically at the start of each epoch
+        # or at the start of `evaluate()`.
+        # If you don't implement this property, you have to call
+        # `reset_states()` yourself at the time of your choosing.
         return [
-            self.total_loss_tracker,
-            self.action_loss_tracker,
-            self.reg_loss_tracker
+            self.train_loss,
+            self.valid_loss,
+            self.train_act_with_enc_loss,
+            self.train_act_with_plan_loss,
+            self.valid_act_with_enc_loss,
+            self.valid_act_with_plan_loss,
+            self.train_reg_loss,
+            self.valid_reg_loss,
+            self.valid_position_loss,
+            self.valid_max_position_loss,
+            self.valid_rotation_loss,
+            self.valid_max_rotation_loss,
+            self.valid_gripper_loss,
         ]
