@@ -6,4 +6,9 @@
 4. Wait for the "Your repository was closed with success" section to pop up and click the button.
 5. In VSCode press 'Enter' for the first two prompts, then enter the password `melons69`.
 6. Once connected open the VSCode terminal and type `bash env/vscode_extensions.sh` to install the Python extensions
-7. You can use git through the VSCode terminal.
+
+### Notes
+
+- You can use git through the VSCode terminal.
+- You can open and run notebooks in VSCode (with the extensions installed by `vscode_extensions.sh`)
+- `wandb` has to be initialized first using the main colab notebook for some reason.

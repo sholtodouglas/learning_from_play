@@ -307,6 +307,7 @@ class PrepUtils:
 
     beta_schedule: lfp.train.BetaScheduler
     checkpoint_callback: tf.keras.callbacks.ModelCheckpoint
+    step_logger: tf.keras.callbacks.Callback
 
     def __init__(self, args: PrepArgs, storage_path: Path):
 
@@ -321,6 +322,20 @@ class PrepUtils:
             save_weights_only=False,
             save_freq=1000,
         )
+
+        class stepLogger(tf.keras.callbacks.Callback):
+            "A Logger that log average performance per `display` steps."
+
+            def __init__(self):
+                self.step = 0
+
+            def on_batch_end(self, batch, logs={}):
+                self.step += 1
+
+            def on_test_batch_end(self, batch, logs={}):
+                wandb.log(logs, step=self.step)
+        
+        self.step_logger = stepLogger()
 
 
 class Preparer:
