@@ -81,7 +81,7 @@ def create_planner(obs_dim, goal_dim, layer_size=2048, latent_dim=256):
 # Account for probabilistic (need to sample the actions to get MAE)
 class LFPNet(Model):
     def __init__(self, encoder, planner, actor, beta, temperature=1/16) -> None:
-        super(LFPNet, self).__init__()
+        super().__init__()
         self.encoder = encoder
         self.planner = planner
         self.actor = actor
@@ -117,6 +117,8 @@ class LFPNet(Model):
         z_hard = tf.one_hot(z_hard, logits.shape[-1], dtype=z_q.dtype)
 
         z = z_q + tf.stop_gradient(z_hard - z_q)
+
+        import pdb; pdb.set_trace()
 
         z_tiled = tf.tile(tf.expand_dims(z[0], 1), (1, inputs['obs'].shape[1], 1))
 
