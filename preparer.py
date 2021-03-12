@@ -346,7 +346,7 @@ class PrepModel:
                 latent_dim=args.latent_dim,
             )
 
-            self.model = LFPNet(encoder, None, actor, beta=args.beta)
+            self.model = LFPNet(encoder, planner, actor, beta=args.beta)
 
             optimizer = tf.keras.optimizers.Adam(args.learning_rate)
 
