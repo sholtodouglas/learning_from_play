@@ -146,7 +146,7 @@ class PrepDashboard:
         wandb.login()
         wandb.init(project="learning-from-play_v2")
         wandb.run.name = args.run_name
-
+        wandb.config.update(args.args)
 
 class PrepPaths:
 
