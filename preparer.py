@@ -94,11 +94,23 @@ class PrepArgs:
             help="Size of the VAE latent space",
         )
         parser.add_argument(
+            "--vocab_size",
+            default=1024,
+            type=int,
+            help="Size of the discrete VAE codebook vectors (only relevant when using --dvae_plan argument)"
+        )
+        parser.add_argument(
             "-g",
             "--gcbc",
             default=False,
             action="store_true",
             help="Enables GCBC, a simpler model with no encoder/planner",
+        )
+        parser.add_argument(
+            "--dvae_plan",
+            default=False,
+            action="store_true",
+            help="Use a discrete VAE for the encoder/decoder",
         )
         parser.add_argument(
             "-n",
@@ -323,40 +335,78 @@ class PrepModel:
         goal_dim: int,
         debug=False,
     ):
-        from lfp.model_v2 import create_actor, create_encoder, create_planner, LFPNet
 
-        with device_strategy.scope():
+        if args.dvae_plan:
+            print('Creating model with DVAE for encoder/decoder')
 
-            actor = create_actor(
-                obs_dim=obs_dim,
-                act_dim=act_dim,
-                goal_dim=goal_dim,
-                latent_dim=args.latent_dim,
-                layer_size=args.actor_layer_size,
-            )
-            encoder = create_encoder(
-                obs_dim=obs_dim,
-                act_dim=act_dim,
-                latent_dim=args.latent_dim,
-                layer_size=args.encoder_layer_size,
-            )
-            planner = create_planner(
-                obs_dim=obs_dim,
-                goal_dim=goal_dim,
-                layer_size=args.encoder_layer_size,
-                latent_dim=args.latent_dim,
-            )
+            from lfp.model_dvae import create_actor, create_encoder, create_planner, LFPNet
 
-            self.model = LFPNet(encoder, planner, actor, beta=args.beta)
+            with device_strategy.scope():
 
-            optimizer = tf.keras.optimizers.Adam(args.learning_rate)
+                actor = create_actor(
+                    obs_dim=obs_dim,
+                    act_dim=act_dim,
+                    goal_dim=goal_dim,
+                    layer_size=args.actor_layer_size,
+                )
+                encoder = create_encoder(
+                    obs_dim=obs_dim,
+                    act_dim=act_dim,
+                    layer_size=args.encoder_layer_size,
+                )
+                # planner = create_planner(
+                #     obs_dim=obs_dim,
+                #     goal_dim=goal_dim,
+                #     layer_size=args.encoder_layer_size,
+                #     latent_dim=args.latent_dim,
+                # )
 
-            self.model.compile(
-                optimizer=optimizer,
-                loss="mae",
-                steps_per_execution=1,
-                run_eagerly=debug,
-            )
+                self.model = LFPNet(encoder, None, actor, beta=args.beta)
+
+                optimizer = tf.keras.optimizers.Adam(args.learning_rate)
+
+                self.model.compile(
+                    optimizer=optimizer,
+                    loss="mae",
+                    steps_per_execution=1,
+                    run_eagerly=debug,
+                )
+        else:
+
+            from lfp.model_v2 import create_actor, create_encoder, create_planner, LFPNet
+
+            with device_strategy.scope():
+
+                actor = create_actor(
+                    obs_dim=obs_dim,
+                    act_dim=act_dim,
+                    goal_dim=goal_dim,
+                    latent_dim=args.latent_dim,
+                    layer_size=args.actor_layer_size,
+                )
+                encoder = create_encoder(
+                    obs_dim=obs_dim,
+                    act_dim=act_dim,
+                    latent_dim=args.latent_dim,
+                    layer_size=args.encoder_layer_size,
+                )
+                planner = create_planner(
+                    obs_dim=obs_dim,
+                    goal_dim=goal_dim,
+                    layer_size=args.encoder_layer_size,
+                    latent_dim=args.latent_dim,
+                )
+
+                self.model = LFPNet(encoder, planner, actor, beta=args.beta)
+
+                optimizer = tf.keras.optimizers.Adam(args.learning_rate)
+
+                self.model.compile(
+                    optimizer=optimizer,
+                    loss="mae",
+                    steps_per_execution=1,
+                    run_eagerly=debug,
+                )
 
 
 class PrepUtils:
