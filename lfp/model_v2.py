@@ -77,7 +77,7 @@ def create_planner(obs_dim, goal_dim, layer_size=2048, latent_dim=256):
 # Account for probabilistic (need to sample the actions to get MAE)
 class LFPNet(Model):
     def __init__(self, encoder, planner, actor, beta) -> None:
-        super(LFPNet, self).__init__()
+        super().__init__()
         self.encoder = encoder
         self.planner = planner
         self.actor = actor

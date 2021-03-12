@@ -361,3 +361,13 @@ class Preparer:
 
         from IPython.core.display import display, HTML
         display(HTML(f"<style>div.output_scroll {{ max-height: {heightEM}em; }}</style>"))
+
+    def do_one_epoch(self):
+
+        return self.model.model.fit(
+            self.dataloader.train_dataset,
+            validation_data=self.dataloader.valid_dataset,
+            epochs = 1,
+            steps_per_epoch = 20,
+            validation_steps=1,
+        )
