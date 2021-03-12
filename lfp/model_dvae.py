@@ -27,9 +27,9 @@ def create_actor(obs_dim, act_dim, goal_dim, latent_dim, layer_size=1024, vocab_
     x = LSTM(layer_size, return_sequences=True, stateful=stateful, name='LSTM_in_1')(x)
     x = LSTM(layer_size, return_sequences=True, stateful=stateful, name='LSTM_in_2')(x)
 
-    logits = Dense(vocab_size, name='to_vocab')(x)
+    # logits = Dense(vocab_size, name='to_vocab')(x)
 
-    return Model([o, z, g], logits)
+    # return Model([o, z, g], logits)
 
     # Deterministic output #
     actions = Dense(act_dim, activation='tanh', name='acts')(x)

@@ -207,9 +207,10 @@ class PrepDevices:
         else:
             physical_devices = tf.config.list_physical_devices()
             if args.device == "GPU":
-                tf.config.experimental.set_memory_growth(
-                    physical_devices[3], enable=True
-                )
+                if len(physical_devices) >= 4:
+                    tf.config.experimental.set_memory_growth(
+                        physical_devices[3], enable=True
+                    )
                 if args.fp16:
                     tf.keras.mixed_precision.set_global_policy("mixed_float16")
             self.device_strategy = tf.distribute.get_strategy()
