@@ -141,11 +141,16 @@ class PrepPaths:
     TRAIN_DATA_PATHS: List[Path]
     TEST_DATA_PATHS: List[Path]
 
-    def __init__(self, args: PrepArgs):
+    def __init__(self, args: PrepArgs, mount_gdrive=False):
         # todo: pathy doesn't work nicely with windows, pathlib probably won't work nicely with buckets (haven't tried yet)
 
         if args.data_source == "DRIVE":
             assert args.colab, "Must be using Colab"
+
+            if mount_gdrive:
+                from google.colab import drive, auth
+                drive.mount('/content/drive')
+
             print("Reading data from Google Drive")
             self.STORAGE_PATH = Path("/content/drive/My Drive/Robotic Learning")
         elif args.data_source == "GCS":
