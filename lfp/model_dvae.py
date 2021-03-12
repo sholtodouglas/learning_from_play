@@ -118,9 +118,9 @@ class LFPNet(Model):
 
         z = z_q + tf.stop_gradient(z_hard - z_q)
 
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
-        z_tiled = tf.tile(tf.expand_dims(z[0], 1), (1, inputs['obs'].shape[1], 1))
+        z_tiled = tf.tile(tf.expand_dims(z, 1), (1, inputs['obs'].shape[1], 1))
 
         acts = self.actor([inputs['obs'], z_tiled, inputs['goals']])
         return acts, z
@@ -140,7 +140,8 @@ class LFPNet(Model):
             act_enc_loss = self.compiled_loss(inputs['acts'], acts_enc, regularization_losses=self.losses)
             act_plan_loss = self.compiled_loss(inputs['acts'], acts_plan, regularization_losses=self.losses)
 
-            reg_loss = tfd.kl_divergence(z_enc, z_plan)
+            # reg_loss = tfd.kl_divergence(z_enc, z_plan)
+            reg_loss = tf.zeros_like(act_enc_loss)
             loss = act_enc_loss + self.beta * reg_loss
 
         gradients = tape.gradient(loss, self.trainable_variables)
@@ -164,7 +165,8 @@ class LFPNet(Model):
         act_enc_loss = self.compiled_loss(inputs['acts'], acts_enc, regularization_losses=self.losses)
         act_plan_loss = self.compiled_loss(inputs['acts'], acts_plan, regularization_losses=self.losses)
 
-        reg_loss = tfd.kl_divergence(z_enc, z_plan)
+        # reg_loss = tfd.kl_divergence(z_enc, z_plan)
+        reg_loss = tf.zeros_like(act_plan_loss)
         loss = act_plan_loss + self.beta * reg_loss
 
         # Update metrics 

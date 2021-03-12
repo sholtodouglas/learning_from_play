@@ -107,6 +107,7 @@ class LFPNet(Model):
             z = self.encoder([inputs['obs'], inputs['acts']])
         z_tiled = tf.tile(tf.expand_dims(z[0], 1), (1, inputs['obs'].shape[1], 1))
         acts = self.actor([inputs['obs'], z_tiled, inputs['goals']])
+        import pdb; pdb.set_trace()
         return acts, z
 
     def train_step(self, inputs):
