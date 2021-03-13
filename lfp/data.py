@@ -365,7 +365,7 @@ def load_precomputed(directory, ordered=False):
     # Arbitrary large numbers, not like it matters - AUTOTUNE occasionally suffers worse perf than just letting it get maxxed by device count
     dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=60) # automatically interleaves reads from multiple files - keep it at 1 we need the order
     dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
-    dataset = dataset.map(read_tfrecord, num_parallel_calls=600)
+    dataset = dataset.map(read_precomputed_tfrecord, num_parallel_calls=600)
     dataset =   dataset.repeat()\
                 .batch(dl.batch_size, drop_remainder=True)\
                 .prefetch(dl.prefetch_size)
