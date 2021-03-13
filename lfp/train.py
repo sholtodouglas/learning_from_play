@@ -159,11 +159,11 @@ class LFPTrainer():
         us up a lot while retaining the data aug!
         '''
     
-        B = self.args.batch_size
+        B = batch['obs'].shape[0]
         # Create a variable seq lens tensor
         seq_lens = tf.random.uniform(shape=[B], minval=self.args.window_size_min, 
                                                 maxval=self.args.window_size_max, dtype=tf.int32)
-        batch['seq_lens'] = seq_lens
+        batch['seq_lens'] = tf.cast(seq_lens, tf.float32) #must be a float for later loss per timestep calcs
         # Create a mask which is length variable seq lens 
         mask = tf.cast(tf.sequence_mask(seq_lens, maxlen=self.args.window_size_max), tf.float32) #  B,T mask
         multiply_mask = tf.expand_dims(mask, -1) # B, T, 1 (for broadcasting)
