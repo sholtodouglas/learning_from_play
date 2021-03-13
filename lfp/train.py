@@ -152,7 +152,12 @@ class LFPTrainer():
         scaled_loss = optimizer.get_scaled_loss(loss)
         return tape.gradient(scaled_loss, model.trainable_variables)
 
-    def make_sequences_variable_length(batch):
+    def make_sequences_variable_length(self, batch):
+        '''
+        This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
+        variable sequence lengths over entire batches rather than in the dataloader, which should speed
+        us up a lot while retaining the data aug!
+        '''
     
         B = self.args.batch_size
         # Create a variable seq lens tensor
@@ -226,7 +231,7 @@ class LFPTrainer():
 
 
     def train_step(self, inputs, beta):
-        inputs = make_sequences_variable_length(inputs) 
+        inputs = self.make_sequences_variable_length(inputs) 
 
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
             actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
@@ -268,7 +273,7 @@ class LFPTrainer():
 
 
     def test_step(self, inputs, beta):
-        inputs = make_sequences_variable_length(inputs) 
+        inputs = self.make_sequences_variable_length(inputs) 
         actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
         if self.args.gcbc:

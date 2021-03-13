@@ -182,7 +182,6 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            print(record_paths)
             dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
