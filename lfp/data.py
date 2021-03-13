@@ -6,6 +6,7 @@ from natsort import natsorted
 import sklearn
 import pprint
 from tqdm import tqdm
+import attr 
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -317,56 +318,64 @@ class PlayDataloader():
 
 
 
-def read_precomputed_tfrecord(example):
-    LABELED_TFREC_FORMAT = {
-            'obs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'acts':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'goals':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'seq_lens':tf.io.FixedLenFeature([], tf.int64),
-            'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-    }
-    data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
-    
-    obs = tf.io.parse_tensor(data['obs'], tf.float32) 
-    acts = tf.io.parse_tensor(data['acts'], tf.float32) 
-    goals = tf.io.parse_tensor(data['goals'], tf.float32)  
-    seq_lens = tf.cast(data['seq_lens'], tf.float32) # make it float32 as we will divide by seq len for per timestep mean loss
-    masks = tf.io.parse_tensor(data['masks'], tf.float32) 
-    imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)   
-    goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
-    goal_imgs = tf.tile(tf.expand_dims(tf.io.parse_tensor(data['goal_imgs'], tf.uint8),0), [args.window_size_max,1,1,1])   
-    proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
 
-    
-    # img = decode_image(data['img'])
 
-    return {  'obs':obs,
-              'acts':acts,
-              'goals':goals,
-              'seq_lens':seq_lens,
-              'masks':masks,
-              'imgs':imgs,
-              'goal_imgs':goal_imgs,
-              'proprioceptive_features':proprioceptive_features}
-              
-def load_precomputed(directory, ordered=False):
-    # Read from TFRecords. For optimal performance, reading from multiple files at once and
-    # disregarding data order. Order does not matter since we will be shuffling the data anyway.
-    # data_paths = [str(STORAGE_PATH/'precompute')+f"/{x}.tfrecords" for x in range(0,8)]
-    filenames = tf.io.gfile.glob(str(directory/'precompute/*.tfrecords'))
-    # check, does this ignore intra order or just inter order? Both are an issue!
-    ignore_order = tf.data.Options()
-    if not ordered:
-        ignore_order.experimental_deterministic = False # disable order, increase speed
 
-    # Arbitrary large numbers, not like it matters - AUTOTUNE occasionally suffers worse perf than just letting it get maxxed by device count
-    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=60) # automatically interleaves reads from multiple files - keep it at 1 we need the order
-    dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
-    dataset = dataset.map(read_precomputed_tfrecord, num_parallel_calls=600)
-    dataset =   dataset.repeat()\
-                .batch(dl.batch_size, drop_remainder=True)\
-                .prefetch(dl.prefetch_size)
-    return dataset
+
+@attr.s
+class precomputedDataloader():
+        args = attr.ib()
+
+        def read_precomputed_tfrecord(self, example):
+            LABELED_TFREC_FORMAT = {
+                    'obs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'acts':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'goals':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'seq_lens':tf.io.FixedLenFeature([], tf.int64),
+                    'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+                    'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            }
+            data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+            
+            obs = tf.io.parse_tensor(data['obs'], tf.float32) 
+            acts = tf.io.parse_tensor(data['acts'], tf.float32) 
+            goals = tf.io.parse_tensor(data['goals'], tf.float32)  
+            seq_lens = tf.cast(data['seq_lens'], tf.float32) # make it float32 as we will divide by seq len for per timestep mean loss
+            masks = tf.io.parse_tensor(data['masks'], tf.float32) 
+            imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)   
+            goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
+            goal_imgs = tf.tile(tf.expand_dims(tf.io.parse_tensor(data['goal_imgs'], tf.uint8),0), [self.args.window_size_max,1,1,1])   
+            proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
+
+            
+            # img = decode_image(data['img'])
+
+            return {  'obs':obs,
+                    'acts':acts,
+                    'goals':goals,
+                    'seq_lens':seq_lens,
+                    'masks':masks,
+                    'imgs':imgs,
+                    'goal_imgs':goal_imgs,
+                    'proprioceptive_features':proprioceptive_features}
+                    
+        def load_precomputed(self, directory, ordered=False):
+            # Read from TFRecords. For optimal performance, reading from multiple files at once and
+            # disregarding data order. Order does not matter since we will be shuffling the data anyway.
+            # data_paths = [str(STORAGE_PATH/'precompute')+f"/{x}.tfrecords" for x in range(0,8)]
+            filenames = tf.io.gfile.glob(str(directory/'precompute/*.tfrecords'))
+            # check, does this ignore intra order or just inter order? Both are an issue!
+            ignore_order = tf.data.Options()
+            if not ordered:
+                ignore_order.experimental_deterministic = False # disable order, increase speed
+
+            # Arbitrary large numbers, not like it matters - AUTOTUNE occasionally suffers worse perf than just letting it get maxxed by device count
+            dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=60) # automatically interleaves reads from multiple files - keep it at 1 we need the order
+            dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
+            dataset = dataset.map(self.read_precomputed_tfrecord, num_parallel_calls=600)
+            dataset =   dataset.repeat()\
+                        .batch(self.args.batch_size, drop_remainder=True)\
+                        .prefetch(tf.data.experimental.AUTOTUNE)
+            return dataset
