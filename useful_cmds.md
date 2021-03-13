@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp3
+export TPU_NAME=lfp5
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -91,7 +91,7 @@ PROB_IM_BIGPLAN_B0_02 \
 -tfr \
 -s GCS \
 -d TPU \
--b 32 \
+-b 16 \
 -la 2048 \
 -le 512 \
 -lp 2048 \
@@ -99,7 +99,6 @@ PROB_IM_BIGPLAN_B0_02 \
 -lr 3e-4 \
 -B 0.01 \
 -t 500000 \
--b 64 \
 -wmin 10 \
 -wmax 40 \
 -i \

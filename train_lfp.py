@@ -274,6 +274,7 @@ def test(valid_dataset, beta):
     trainer.distributed_test_step(valid_batch, beta)
 
 while t < args.train_steps:
+    print('Loop begin')
     start_time = time.time()
     beta = beta_sched.scheduler(t)
     train(train_dist_dataset, beta)
