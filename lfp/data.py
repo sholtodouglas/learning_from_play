@@ -352,11 +352,11 @@ def read_precomputed_tfrecord(example):
               'goal_imgs':goal_imgs,
               'proprioceptive_features':proprioceptive_features}
               
-def load_precomputed(filenames, ordered=False):
+def load_precomputed(directory, ordered=False):
     # Read from TFRecords. For optimal performance, reading from multiple files at once and
     # disregarding data order. Order does not matter since we will be shuffling the data anyway.
     # data_paths = [str(STORAGE_PATH/'precompute')+f"/{x}.tfrecords" for x in range(0,8)]
-
+    filenames = tf.io.gfile.glob(str(directory/'precompute/*.tfrecords'))
     # check, does this ignore intra order or just inter order? Both are an issue!
     ignore_order = tf.data.Options()
     if not ordered:
