@@ -198,7 +198,7 @@ class PlayDataloader():
         :return:
         """
         # Action limit validation
-        self.validate_action_label(dataset['acts'])
+        #self.validate_action_label(dataset['acts'])
 
         # State representations
         obs = dataset['obs']

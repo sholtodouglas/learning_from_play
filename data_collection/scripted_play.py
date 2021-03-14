@@ -1,7 +1,7 @@
 # Ok, lets collect data from preprogrammed pick
 
 import gym
-import pandaRL
+import roboticsPlayroomPybullet
 import numpy as np
 import os
 import shutil

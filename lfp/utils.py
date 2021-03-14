@@ -2,7 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import gym
-import pandaRL
+import roboticsPlayroomPybullet
 
 
 def load_weights(path, actor, encoder=None, planner=None, cnn=None, step=""):

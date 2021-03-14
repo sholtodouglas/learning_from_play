@@ -10,7 +10,7 @@ import pybullet_data
 import numpy as np
 from pickle import dumps 
 import math
-import pandaRL
+import roboticsPlayroomPybullet
 import gym
 import os
 import shutil
