@@ -2,8 +2,6 @@ import os
 import numpy as np
 import tensorflow as tf
 import gym
-import roboticsPlayroomPybullet
-
 
 def load_weights(path, actor, encoder=None, planner=None, cnn=None, step=""):
     '''
@@ -47,6 +45,7 @@ def images_to_2D_features(imgs, proprioceptive_features, goal_imgs, cnn):
 
 
 def load_env(JOINTS = False, QUAT=False, RELATIVE=False, arm='UR5'):
+    import roboticsPlayroomPybullet
 
     if arm == 'UR5':
         if JOINTS and RELATIVE:
