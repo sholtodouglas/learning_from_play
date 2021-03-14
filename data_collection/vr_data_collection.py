@@ -107,14 +107,14 @@ def do_command(t,t0):
     #print(t-t0)
     #print(GRIPPER)
     #print(p.getEulerFromQuaternion(ORI))
-    targetPoses = env.panda.goto(POS, ORI, GRIPPER)
+    targetPoses = env.instance.goto(POS, ORI, GRIPPER)
     return targetPoses
 
 
 
 def save_stuff(env,acts, obs, ags, cagb, joints, acts_rpy, acts_rpy_rel, velocities, obs_rpy, obs_rpy_inc_obj, gripper_proprioception):
     # what do we care about, POS, ORI and GRIPPER?
-    state = env.panda.calc_state() 
+    state = env.instance.calc_state() 
     #print(p.getEulerFromQuaternion(state['observation'][3:7]))
     
     #pos_to_save = list(np.array(POS) - state['observation'][0:3]) # actually, keep it absolute

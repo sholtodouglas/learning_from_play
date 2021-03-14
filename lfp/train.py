@@ -152,47 +152,47 @@ class LFPTrainer():
         scaled_loss = optimizer.get_scaled_loss(loss)
         return tape.gradient(scaled_loss, model.trainable_variables)
 
-    # def make_sequences_variable_length(self, batch):
-    #     '''
-    #     This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
-    #     variable sequence lengths over entire batches rather than in the dataloader, which should speed
-    #     us up a lot while retaining the data aug!
-    #     PS: It actually speeds up training, bringing it in line with pre-compute
-    #     '''
+    def make_sequences_variable_length(self, batch):
+        '''
+        This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
+        variable sequence lengths over entire batches rather than in the dataloader, which should speed
+        us up a lot while retaining the data aug!
+        PS: It actually speeds up training, bringing it in line with pre-compute
+        '''
     
-    #     B = batch['obs'].shape[0]
-    #     # Create a variable seq lens tensor
-    #     seq_lens = tf.random.uniform(shape=[B], minval=self.args.window_size_min, 
-    #                                             maxval=self.args.window_size_max, dtype=tf.int32)
-    #     batch['seq_lens'] = tf.cast(seq_lens, tf.float32) #must be a float for later loss per timestep calcs
-    #     # Create a mask which is length variable seq lens 
-    #     mask = tf.cast(tf.sequence_mask(seq_lens, maxlen=self.args.window_size_max), tf.float32) #  B,T mask
-    #     multiply_mask = tf.expand_dims(mask, -1) # B, T, 1 (for broadcasting)
+        B = batch['obs'].shape[0]
+        # Create a variable seq lens tensor
+        seq_lens = tf.random.uniform(shape=[B], minval=self.args.window_size_min, 
+                                                maxval=self.args.window_size_max, dtype=tf.int32)
+        batch['seq_lens'] = tf.cast(seq_lens, tf.float32) #must be a float for later loss per timestep calcs
+        # Create a mask which is length variable seq lens 
+        mask = tf.cast(tf.sequence_mask(seq_lens, maxlen=self.args.window_size_max), tf.float32) #  B,T mask
+        multiply_mask = tf.expand_dims(mask, -1) # B, T, 1 (for broadcasting)
 
-    #     batch['masks'] = mask
-    #     batch['obs'] *= multiply_mask
-    #     batch['acts'] *= multiply_mask
-    #     # Save goals for later as it depends whether it is imgs or not
-    #     # Get numbers 0>B to concat with the seq lens for gather_nd
-    #     B_range = tf.range(0, B, delta=1, dtype=tf.int32, name='range') # B
-    #     B_indices = tf.stack([B_range, seq_lens], axis = 1) # B,2
-    #     if self.args.images:
-    #         # get the goals corresponding to each of the seq len ends
-    #         goals = tf.gather_nd(batch['imgs'], B_indices)[:, tf.newaxis,:] # B, 1, imgheight, imgwidth, 3
-    #         tile_dims = tf.constant([1, self.args.window_size_max, 1,1,1], tf.int32) 
-    #         goals = tf.tile(goals, tile_dims) # B, T, imgheight, imgwidth, 3
-    #         imgs_mask = tf.cast(multiply_mask, tf.uint8)[:,:,:, tf.newaxis, tf.newaxis] # Must be 5 dim because the imgs are B, T, H, W, C
-    #         batch['goal_imgs'] = goals *imgs_mask
-    #         # End goal specific stuff, start img specific stuff
-    #         batch['imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
-    #         batch['proprioceptive_features'] *= multiply_mask
-    #     else:
-    #         goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
-    #         tile_dims = tf.constant([1, self.args.window_size_max, 1], tf.int32) 
-    #         goals = tf.tile(goals, tile_dims) # B, T, achieved_goal_dim
-    #         batch['goals'] *= multiply_mask# B, T, achieved_goal_dim
+        batch['masks'] = mask
+        batch['obs'] *= multiply_mask
+        batch['acts'] *= multiply_mask
+        # Save goals for later as it depends whether it is imgs or not
+        # Get numbers 0>B to concat with the seq lens for gather_nd
+        B_range = tf.range(0, B, delta=1, dtype=tf.int32, name='range') # B
+        B_indices = tf.stack([B_range, seq_lens], axis = 1) # B,2
+        if self.args.images:
+            # get the goals corresponding to each of the seq len ends
+            goals = tf.gather_nd(batch['imgs'], B_indices)[:, tf.newaxis,:] # B, 1, imgheight, imgwidth, 3
+            tile_dims = tf.constant([1, self.args.window_size_max, 1,1,1], tf.int32) 
+            goals = tf.tile(goals, tile_dims) # B, T, imgheight, imgwidth, 3
+            imgs_mask = tf.cast(multiply_mask, tf.uint8)[:,:,:, tf.newaxis, tf.newaxis] # Must be 5 dim because the imgs are B, T, H, W, C
+            batch['goal_imgs'] = goals *imgs_mask
+            # End goal specific stuff, start img specific stuff
+            batch['imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
+            batch['proprioceptive_features'] *= multiply_mask
+        else:
+            goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
+            tile_dims = tf.constant([1, self.args.window_size_max, 1], tf.int32) 
+            goals = tf.tile(goals, tile_dims) # B, T, achieved_goal_dim
+            batch['goals'] *= multiply_mask# B, T, achieved_goal_dim
 
-    #     return batch
+        return batch
 
 
     def step(self, inputs):
@@ -232,7 +232,7 @@ class LFPTrainer():
 
 
     def train_step(self, inputs, beta):
-        # inputs = self.make_sequences_variable_length(inputs) 
+        inputs = self.make_sequences_variable_length(inputs) 
 
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
             actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
@@ -274,7 +274,7 @@ class LFPTrainer():
 
 
     def test_step(self, inputs, beta):
-        # inputs = self.make_sequences_variable_length(inputs) # 
+        inputs = self.make_sequences_variable_length(inputs) # 
         actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
         if self.args.gcbc:
@@ -411,40 +411,3 @@ class LFPTrainer():
         distributed_opt_step()
         # Set the weights of the optimizer
         optimizer.set_weights(opt_weights)
-
-
-
-
-
-
-
-
-
-
-
-
-    # def tile_goals(self, batch):
-    #     '''
-    #     This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
-    #     variable sequence lengths over entire batches rather than in the dataloader, which should speed
-    #     us up a lot while retaining the data aug!
-    #     '''
-    #     B = batch['obs'].shape[0]
-    #     # Create a variable seq lens tensor
-    #     batch['seq_lens'] = tf.ones([B]) #tf.cast(seq_lens, tf.float32) #must be a float for later loss per timestep calcs
-    #     batch['masks'] = tf.ones([B, self.args.window_size_max]) #mask
-    #     if self.args.images:
-    #         # get the goals corresponding to each of the seq len ends
-    #         #goals = tf.gather_nd(batch['imgs'], B_indices)[:, tf.newaxis,:] # B, 1, imgheight, imgwidth, 3
-    #         goals = batch['imgs'][:, -1, :,:,:][:, tf.newaxis,:]
-    #         tile_dims = tf.constant([1, self.args.window_size_max, 1,1,1], tf.int32) 
-    #         goals = tf.tile(goals, tile_dims) # B, T, imgheight, imgwidth, 3
-    #         batch['goal_imgs'] = goals# *imgs_mask
-
-    #     else:
-    #         goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
-    #         tile_dims = tf.constant([1, self.args.window_size_max, 1], tf.int32) 
-    #         goals = tf.tile(goals, tile_dims) # B, T, achieved_goal_dim
-    #         batch['goals'] *= multiply_mask# B, T, achieved_goal_dim
-
-    #     return batch

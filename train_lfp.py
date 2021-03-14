@@ -262,13 +262,13 @@ else:
 from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
-# Creating these autograph wrappers so that tf.data operations are executed in graph mode
-@tf.function
+# Autograph just
+# @tf.function
 def train(train_dataset, beta):
     train_batch = next(train_dataset)
     trainer.distributed_train_step(train_batch, beta)
 
-@tf.function
+# @tf.function
 def test(valid_dataset, beta):
     valid_batch = next(valid_dataset)
     trainer.distributed_test_step(valid_batch, beta)

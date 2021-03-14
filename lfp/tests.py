@@ -94,7 +94,7 @@ class tester():
         self.env = env
 
     def current_ag(self):
-        return self.env.panda.calc_state()['achieved_goal']
+        return self.env.instance.calc_state()['achieved_goal']
 
     def make_goal(self, obj, pos=None, ori=None):
         '''
@@ -115,15 +115,15 @@ class tester():
         return tf.expand_dims(tf.expand_dims(g,0),0)
     
     def set_door(self, position='middle'): # or 'right' or 'left'
-        door = self.env.panda.joints[0]
-        self.env.panda.bullet_client.resetJointState(door, 0, door_positions[position])
+        door = self.env.instance.joints[0]
+        self.env.instance.resetJointState(door, 0, door_positions[position])
         
     ## And a few functions to reset individual elements so that the tests are accurate (hard to put things in a closed drawer)
     def set_drawer(self, position="middle"): # or 'open' or 'closed'
-        drawer = self.env.panda.drawer
+        drawer = self.env.instance.drawer
         drawer_pos = drawer['defaults']['pos']
         drawer_pos[1] = drawer_positions[position]
-        self.env.panda.bullet_client.resetBasePositionAndOrientation(drawer['drawer'], drawer_pos,
+        self.env.instance.resetBasePositionAndOrientation(drawer['drawer'], drawer_pos,
                                                                    drawer['defaults']['ori'])
        
     def prepare_env(self, task):
