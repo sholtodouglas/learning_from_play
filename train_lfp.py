@@ -214,16 +214,6 @@ valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset
 plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
 
 
-from lfp.train import BetaScheduler
-
-beta_sched = BetaScheduler('linear', 
-                           beta=args.beta, 
-                           beta_max=args.beta, 
-                           max_steps=args.train_steps, 
-                           cycles=90, 
-                           duty_cycle=0.5
-                           )
-
 
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
@@ -276,14 +266,14 @@ def test(valid_dataset, beta):
 while t < args.train_steps:
     print('Loop begin')
     start_time = time.time()
-    beta = beta_sched.scheduler(t)
-    train(train_dist_dataset, beta)
+    
+    train(train_dist_dataset, args.beta)
 
     print('Stepped')
 
     if t % valid_inc == 0:
         step_time = round(time.time() - start_time, 1)
-        test(valid_dist_dataset, beta)
+        test(valid_dist_dataset, args.beta)
         print('Tested')
         
 
@@ -302,7 +292,7 @@ while t < args.train_steps:
         wandb.log(metrics, step=t)
         print('wandb')
 
-    if (t) % save_inc == 0:
+    if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
         print('saved')
         if not args.gcbc or args.images:
