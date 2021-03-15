@@ -6,7 +6,17 @@ from natsort import natsorted
 import sklearn
 import pprint
 from tqdm import tqdm
-import attr 
+
+pp = pprint.PrettyPrinter(indent=4)
+
+import glob
+import tensorflow as tf
+import os
+import numpy as np
+from natsort import natsorted
+import sklearn
+import pprint
+from tqdm import tqdm
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -85,14 +95,14 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, include_imgs=False, ordered=True, num_parallel_reads=1):
+def extract_tfrecords(paths, include_imgs=False, ordered=True, num_workers=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # must be 1 to maintain order while streaming from GCS
 
-    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=num_parallel_reads)
+    dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=1)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_parallel_reads)
+    dataset = dataset.map(read_tfrecord(include_imgs), num_parallel_calls=num_workers)
     return dataset
 
 
@@ -115,10 +125,9 @@ class PlayDataloader():
                 normalize=False,
                 gripper_proprioception=False,
                 batch_size=32,
-                window_size=50,
+                window_size=40,
                 min_window_size=20,
                 window_shift=1,
-                variable_seqs=True, 
                 include_imgs=False,
                 shuffle_size=None, 
                 num_workers=tf.data.experimental.AUTOTUNE,
@@ -134,9 +143,7 @@ class PlayDataloader():
         
         self.batch_size = batch_size
         self.window_size = window_size
-        self.min_window_size = min_window_size
         self.window_shift = window_shift
-        self.variable_seqs = variable_seqs
         self.include_imgs = include_imgs
         self.shuffle_size = int(batch_size * (window_size / window_shift)) if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
@@ -152,15 +159,6 @@ class PlayDataloader():
         hours = secs // 3600
         minutes = secs // 60 - hours * 60
         print(f"{dataset_size} frames, which is {hours:.0f}hrs {minutes:.0f}m.")
-
-    def create_goal_tensor(self, dataset, tensor='achieved_goals', seq_len=-1):
-        ''' Tile final achieved_goal across time dimension '''
-        if tensor == 'img':
-            tile_dims = tf.constant([self.window_size, 1,1,1], tf.int32)
-        else:
-            tile_dims = tf.constant([self.window_size, 1], tf.int32)
-        goal = tf.tile(dataset[tensor][seq_len-1,tf.newaxis], tile_dims) # as goal is at an index take seq_len -1
-        return goal
 
     def validate_action_label(self, acts):
         if self.quaternion_act or self.joints:
@@ -184,7 +182,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_parallel_reads=1)
+            dataset = extract_tfrecords(record_paths, self.include_imgs, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset)
@@ -197,33 +195,28 @@ class PlayDataloader():
         :param dataset:
         :return:
         """
-        # Action limit validation
-        #self.validate_action_label(dataset['acts'])
-
         # State representations
         obs = dataset['obs']
-
         
         # act in joint space
         if self.joints:
-            obs = tf.concat([obs,dataset['joint_poses'][:,:7]], axis=-1)
+            obs = tf.concat([obs,dataset['joint_poses'][:7]], axis=-1)
             acts = dataset['target_poses']
             if self.relative_act:
-                acts = acts - dataset['joint_poses'][:,:6]
-
+                acts = acts - dataset['joint_poses'][:6]
         # act in position space with quaternions
         elif self.quaternion_act:
-                acts = dataset['acts_quat'][:,:7]
+                acts = dataset['acts_quat'][:7]
                 if self.relative_act:
-                    acts = acts  - dataset['obs_quat'][:,:7]
+                    acts = acts - dataset['obs_quat'][:7]
         # act in rpy position space            
         else:
-            acts = dataset['acts'][:,:6]
+            acts = dataset['acts'][:6]
             if self.relative_act:
-                acts = acts - dataset['obs'][:,:6]
+                acts = acts - dataset['obs'][:6]
                 
         # add the gripper on the end
-        gripper = dataset['acts'][:,-1,tf.newaxis]
+        gripper = dataset['acts'][-1,tf.newaxis]
         acts = tf.concat([acts, gripper], axis=-1)
 
         if self.relative_obs:
@@ -232,60 +225,33 @@ class PlayDataloader():
             obs = tf.concat([obs, dataset['velocities']], axis=-1)
         if self.gripper_proprioception:
             obs = tf.concat([obs, dataset['proprioception']], axis=-1)
-            
-        # Variable Seq len
-        if self.variable_seqs:
-            seq_len = tf.random.uniform(shape=[], minval=self.min_window_size, 
-                                        maxval=self.window_size, dtype=tf.int32, seed=self.seed)
-            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
-            # Masking
-            mask = tf.cast(tf.sequence_mask(seq_len, maxlen=self.window_size), tf.float32) # creates a B*T mask
-            multiply_mask = tf.expand_dims(mask, -1)
 
-            obs *= multiply_mask
-            goals *= multiply_mask
-            acts *= multiply_mask
-        else:
-            seq_len = self.window_size
-            goals = self.create_goal_tensor(dataset, seq_len=seq_len)
-          
-        # # Key data dimensions
-        # self.obs_dim = obs.shape[1]
-        # self.goal_dim = goals.shape[1]
-        # self.act_dim = acts.shape[1]
-        
         # Preprocessing
         # TODO: make this static normalization by some constant
         if self.normalize:
             # Record the mean like we used to @Tristan
             raise NotImplementedError
         
-        return_dict = {'obs':obs, 
-                'acts':acts, 
-                'goals':goals, 
-                'seq_lens': tf.cast(seq_len, tf.float32), 
-                'masks':mask, 
-                'dataset_path':dataset['sequence_id'], 
-                'tstep_idxs':dataset['sequence_index']}
+        return_dict = {'obs': obs,
+                'acts': acts,
+                'goals': dataset['achieved_goals'], # use this for the goal tiling on device
+                'dataset_path': dataset['sequence_id'],
+                'tstep_idxs': dataset['sequence_index']}
 
         if self.include_imgs:
-            return_dict['imgs'] = dataset['img']
-            return_dict['goal_imgs'] = self.create_goal_tensor(dataset, 'img', seq_len)
-            if self.variable_seqs:
-                # Here is a nice micro optimisation - by keeping imgs int in the dataloader we make our calls to dataloader 3x faster
-                # and can keep the /255 step in the cnn intself, which removes a source of error in deployment of the model
-                imgs_mask = tf.cast(multiply_mask, tf.uint8)[:,:,tf.newaxis, tf.newaxis] # Must be 4 dim because the imgs are T, H, W, C
-                return_dict['imgs'] *= imgs_mask
-                return_dict['goal_imgs'] *= imgs_mask
+            return_dict['imgs'] = dataset['img'] # use this for the goal tiling on device
             # Proprioceptive features are xyz, rpy, gripper angle
-            return_dict['proprioceptive_features'] = obs[:,:7]
-            
+            return_dict['proprioceptive_features'] = obs[:7]
 
         # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
-    
-    # TODO: why did we not need this before?? window_lambda is being weird
-    # @tf.autograph.experimental.do_not_convert
+
+    # Note: main reasons the dataloader was slow before are:
+    # - mapping transform after windowing (we want it ideally before)
+    # - var seq lens and goal tiling are computationally expensive (we ought to do on device)
+    # - single-threaded tfrecords mapper (NOT the IO)
+    # - action validation also taxing, it could be risky removing but it's also too slow. We should validate our
+    #   data once off beforehand. Todo: write a data validator
     def load(self, dataset):
         """
 
@@ -293,16 +259,15 @@ class PlayDataloader():
         :return:
         """
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
-        seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['sequence_id'])).y), 1)
-        dataset = dataset\
-                .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)\
-                .flat_map(window_lambda)\
-                .filter(seq_overlap_filter)\
-                .shuffle(self.shuffle_size)\
-                .repeat()\
-                .map(self.transform, num_parallel_calls=self.num_workers)\
-                .batch(self.batch_size, drop_remainder=True)\
-                .prefetch(self.prefetch_size)
+        seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['dataset_path'])).y), 1)
+        dataset = (dataset
+                    .map(self.transform, num_parallel_calls=self.num_workers)
+                    .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)
+                    .flat_map(window_lambda)
+                    .filter(seq_overlap_filter) # Todo: optimise this/remove if possible
+                    .shuffle(self.shuffle_size)
+                    .batch(self.batch_size, drop_remainder=True)
+                    .prefetch(self.prefetch_size))
 
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
         self.goal_dim = dataset.element_spec['goals'].shape[-1]
@@ -313,69 +278,3 @@ class PlayDataloader():
 
         pp.pprint(dataset.element_spec)
         return dataset
-
-
-
-
-
-
-
-
-
-@attr.s
-class precomputedDataloader():
-        args = attr.ib()
-
-        def read_precomputed_tfrecord(self, example):
-            LABELED_TFREC_FORMAT = {
-                    'obs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'acts':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'goals':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'seq_lens':tf.io.FixedLenFeature([], tf.int64),
-                    'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-                    'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
-            }
-            data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
-            
-            obs = tf.io.parse_tensor(data['obs'], tf.float32) 
-            acts = tf.io.parse_tensor(data['acts'], tf.float32) 
-            goals = tf.io.parse_tensor(data['goals'], tf.float32)  
-            seq_lens = tf.cast(data['seq_lens'], tf.float32) # make it float32 as we will divide by seq len for per timestep mean loss
-            masks = tf.io.parse_tensor(data['masks'], tf.float32) 
-            imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)   
-            goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
-            goal_imgs = tf.tile(tf.expand_dims(tf.io.parse_tensor(data['goal_imgs'], tf.uint8),0), [self.args.window_size_max,1,1,1])   
-            proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
-
-            
-            # img = decode_image(data['img'])
-
-            return {  'obs':obs,
-                    'acts':acts,
-                    'goals':goals,
-                    'seq_lens':seq_lens,
-                    'masks':masks,
-                    'imgs':imgs,
-                    'goal_imgs':goal_imgs,
-                    'proprioceptive_features':proprioceptive_features}
-                    
-        def load_precomputed(self, directory, ordered=False):
-            # Read from TFRecords. For optimal performance, reading from multiple files at once and
-            # disregarding data order. Order does not matter since we will be shuffling the data anyway.
-            # data_paths = [str(STORAGE_PATH/'precompute')+f"/{x}.tfrecords" for x in range(0,8)]
-            filenames = tf.io.gfile.glob(str(directory/'precompute/*.tfrecords'))
-            # check, does this ignore intra order or just inter order? Both are an issue!
-            ignore_order = tf.data.Options()
-            if not ordered:
-                ignore_order.experimental_deterministic = False # disable order, increase speed
-
-            # Arbitrary large numbers, not like it matters - AUTOTUNE occasionally suffers worse perf than just letting it get maxxed by device count
-            dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=60) # automatically interleaves reads from multiple files - keep it at 1 we need the order
-            dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
-            dataset = dataset.map(self.read_precomputed_tfrecord, num_parallel_calls=600)
-            dataset =   dataset.repeat()\
-                        .batch(self.args.batch_size, drop_remainder=True)\
-                        .prefetch(tf.data.experimental.AUTOTUNE)
-            return dataset
