@@ -1,6 +1,14 @@
 # import os
 # os.system(r'"C:\Users\sholt\Desktop\bullet3\bin\App_PhysicsServer_SharedMemory_VR_vs2010_x64_release.exe"')
 
+'''
+To teleoperate, you'll need to set up pyBullet VR https://docs.google.com/document/d/1I4m0Letbkw4je5uIBxuCfhBcllnwKojJAyYSTjHbrH8/edit?usp=sharing, 
+then run the 'App_PhysicsServer_SharedMemory_VR' executable you create in that process, then run this file, which should take over SteamVR window. 
+The arm will track your controller, the main trigger will close the gripper and the secondary trigger will save the trajectory you have collected. 
+We save 'full state' not images during data collection - because this allows us to determinstically reset the environment to that state and then 
+collect images from any angle desired!
+'''
+
 debugging = False
 
 import socket
