@@ -13,6 +13,7 @@ wandb.login()
 import argparse
 
 
+
 parser = argparse.ArgumentParser(description='LFP training arguments')
 parser.add_argument('run_name')
 parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
@@ -22,11 +23,11 @@ parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of trai
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
 parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=512, type=int)
-parser.add_argument('-wmax', '--window_size_max', default=50, type=int)
+parser.add_argument('-wmax', '--window_size_max', default=40, type=int)
 parser.add_argument('-wmin', '--window_size_min', default=20, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
-parser.add_argument('-lp', '--planner_layer_size', default=512, type=int, help='Layer size of planner, increases size of neural net')
+parser.add_argument('-lp', '--planner_layer_size', default=2048, type=int, help='Layer size of planner, increases size of neural net')
 parser.add_argument('-embd', '--img_embedding_size', default=64, type=int, help='Embedding size of features,goal space')
 parser.add_argument('-z', '--latent_dim', default=256, type=int, help='Size of the VAE latent space')
 parser.add_argument('-g', '--gcbc', default=False, action='store_true', help='Enables GCBC, a simpler model with no encoder/planner')
@@ -38,8 +39,6 @@ parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
 parser.add_argument('--fp16', default=False, action='store_true')
-# parser.add_argument('--debug', default=False, action='store_true')
-
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
 
@@ -179,7 +178,7 @@ def train_setup():
                 'act_dim':dl.act_dim,
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
-    
+
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
     if args.gcbc:
@@ -192,21 +191,21 @@ def train_setup():
         planner = lfp.model.create_planner(**model_params)
 
     if args.images:
-        cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
-        lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
+      cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
+      lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
     else:
       cnn = None
 
     #optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
-    optimizer = tf.optimizers.Adam
+    optimizer = optimizer = tf.optimizers.Adam
     trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
-    return actor, encoder, planner, trainer
+    return actor, encoder, planner, cnn, trainer
 
 if args.device=='CPU' or args.device=='GPU':
-     actor, encoder, planner, trainer = train_setup()
+     actor, encoder, planner, cnn, trainer = train_setup()
 else:
     with strategy.scope():
-         actor, encoder, planner, trainer = train_setup()
+         actor, encoder, planner, cnn, trainer = train_setup()
         
         
 train_dist_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
@@ -215,11 +214,11 @@ plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non d
 
 
 
+
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20
-save_inc = 5000
-prev_grad_norm = np.float('inf')
+save_inc = 2000
 
 
 run_name = args.run_name
@@ -238,7 +237,7 @@ if args.resume:
   load_weights(model_path, actor, encoder, planner, with_optimizer=True)
   print('Loaded model weights and optimiser state')
   
-  progbar.add(t, []) # update the progbar to the most recent point
+  prognar.add(t, []) # update the progbar to the most recent point
 else:
   #Comet
   experiment = Experiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",project_name="learning-from-play",workspace="sholtodouglas")
@@ -253,29 +252,25 @@ from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_imag
 from lfp.metric import log # gets state and clears simultaneously
 
 # Autograph just
-# @tf.function
+# Creating these autograph wrappers so that tf.data operations are executed in graph mode
+#@tf.function
 def train(train_dataset, beta):
     train_batch = next(train_dataset)
     trainer.distributed_train_step(train_batch, beta)
 
-# @tf.function
+#@tf.function
 def test(valid_dataset, beta):
     valid_batch = next(valid_dataset)
     trainer.distributed_test_step(valid_batch, beta)
 
 while t < args.train_steps:
-    print('Loop begin')
     start_time = time.time()
-    
-    train(train_dist_dataset, args.beta)
-
-    print('Stepped')
+    beta = beta_sched.scheduler(t)
+    train(train_dist_dataset, beta)
 
     if t % valid_inc == 0:
+        test(valid_dist_dataset, beta)
         step_time = round(time.time() - start_time, 1)
-        test(valid_dist_dataset, args.beta)
-        print('Tested')
-        
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
         metrics['step_time'] = step_time
@@ -284,23 +279,19 @@ while t < args.train_steps:
         progbar.add(valid_inc, [('Train Loss', metrics['train_loss']),
                                 ('Validation Loss', metrics['valid_loss']),
                                 ('Time (s)', step_time)])
-        print('logged')
         #Plot on Comet
         experiment.log_metrics(metrics,step=t)
-        print('comet')
         # Plot on WandB
         wandb.log(metrics, step=t)
-        print('wandb')
 
     if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
-        print('saved')
-        if not args.gcbc or args.images:
-          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=args.batch_size)
+        if not args.gcbc and not args.images:
+          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
           #Comet
-#           experiment.log_figure('z_enc', z_enc, step=t)
-#           experiment.log_figure('z_plan', z_plan,step=t)
+          experiment.log_figure('z_enc', z_enc, step=t)
+          experiment.log_figure('z_plan', z_plan,step=t)
 
           # WandB
           wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
