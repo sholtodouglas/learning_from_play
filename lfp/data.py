@@ -265,6 +265,7 @@ class PlayDataloader():
                     .window(size=self.window_size, shift=self.window_shift, stride=1, drop_remainder=True)
                     .flat_map(window_lambda)
                     .filter(seq_overlap_filter) # Todo: optimise this/remove if possible
+                    .repeat()
                     .shuffle(self.shuffle_size)
                     .batch(self.batch_size, drop_remainder=True)
                     .prefetch(self.prefetch_size))
