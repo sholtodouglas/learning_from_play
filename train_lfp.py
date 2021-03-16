@@ -265,11 +265,10 @@ def test(valid_dataset, beta):
 
 while t < args.train_steps:
     start_time = time.time()
-    beta = beta_sched.scheduler(t)
-    train(train_dist_dataset, beta)
+    train(train_dist_dataset, args.beta)
 
     if t % valid_inc == 0:
-        test(valid_dist_dataset, beta)
+        test(valid_dist_dataset, args.beta)
         step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
