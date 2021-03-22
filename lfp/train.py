@@ -221,7 +221,16 @@ class LFPTrainer():
             encoding = self.encoder([states, actions])
             plan = self.planner([states[:, 0, :], goals[:, 0,
                                                   :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
-            z_enc = encoding.sample()
+            if self.args.discrete:
+                z_q = tfpl.DistributionLambda(
+                        lambda logits: tfd.RelaxedOneHotCategorical(self.temperature, encoding)
+                    )(encoding)
+                z_hard = tf.math.argmax(encoding, axis=-1)
+                z_hard = tf.one_hot(z_hard, encoding.shape[-1], dtype=z_q.dtype)
+
+                z_enc = z_q + tf.stop_gradient(z_hard - z_q)
+            else:
+                z_enc = encoding.sample()
             z_plan = plan.sample()
             z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
             z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
@@ -288,7 +297,11 @@ class LFPTrainer():
             act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
             reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
             loss = act_plan_loss + reg_loss * beta
-            log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
+            if self.args.discrete:
+                log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
+                                 self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
+            else:
+                log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
         return record(loss,self.metrics['valid_loss'])
 

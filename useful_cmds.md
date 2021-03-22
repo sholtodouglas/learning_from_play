@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp5
+export TPU_NAME=lfp3
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -31,7 +31,16 @@ ctpu up \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
 --tpu-size=$TPU_SIZE \
---machine-type=g1-small \
+--machine-type=e2-medium \
+--disk-size-gb=50
+
+
+ctpu up \
+--project=learning-from-play-303306 \
+--zone=$TPU_ZONE \
+--tf-version=2.4.1 \
+--name=$TPU_NAME \
+--tpu-size=$TPU_SIZE \
 --disk-size-gb=50
 
 [--preemptible]
@@ -55,6 +64,8 @@ cd learning_from_play
 ./setup.sh
 ```
 
+export TPU_NAME=lfp1
+export BUCKET_NAME=lfp_europe_west4_a
 # Run the sample training script for GCS setup
 
 ```
@@ -97,9 +108,9 @@ PROB_IM_BIGPLAN_B0_02 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.01 \
+-B 0.02 \
 -t 500000 \
--wmin 10 \
+-wmin 20 \
 -wmax 40 \
 -i \
 -tfr \
@@ -115,7 +126,7 @@ IM_BIGPLAN_B0_00003 \
 -tfr \
 -s GCS \
 -d TPU \
--b 32 \
+-b 16 \
 -la 2048 \
 -le 512 \
 -lp 2048 \
@@ -123,8 +134,7 @@ IM_BIGPLAN_B0_00003 \
 -lr 3e-4 \
 -B 0.00003 \
 -t 500000 \
--b 64 \
--wmin 10 \
+-wmin 20 \
 -wmax 40 \
 -i \
 -tfr \
