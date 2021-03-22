@@ -280,7 +280,7 @@ class LFPTrainer():
 
                 self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
                 self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
-                if not self.discrete:
+                if not self.args.discrete:
                     self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
 
