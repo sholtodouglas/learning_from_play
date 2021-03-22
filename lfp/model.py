@@ -139,7 +139,7 @@ def create_discrete_encoder(obs_dim, act_dim, layer_size=2048, latent_dim=1024, 
     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
     x = Bidirectional(LSTM(layer_size, return_sequences=False), merge_mode='concat')(x)
 
-    logits = Dense(vocab_size, name='to_vocab')(x)
+    logits = Dense(latent_dim, name='to_vocab')(x)
     return Model([obs, acts], logits)
 
 
