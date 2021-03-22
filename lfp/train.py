@@ -255,9 +255,12 @@ class LFPTrainer():
             else:
                 enc_policy, plan_policy, encoding, plan = self.step(inputs)
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
-                act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['train_act_with_plan_loss'])
-                reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
-                loss = act_enc_loss + reg_loss * beta
+                if self.args.discrete:
+                    loss = act_enc_loss
+                else:
+                    act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['train_act_with_plan_loss'])
+                    reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
+                    loss = act_enc_loss + reg_loss * beta
 
                 if self.args.fp16:
                     actor_gradients = self.compute_fp16_grads(self.actor_optimizer, loss, actor_tape, self.actor)
@@ -295,13 +298,15 @@ class LFPTrainer():
         else:
             enc_policy, plan_policy, encoding, plan = self.step(inputs)
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
-            act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
-            reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
-            loss = act_plan_loss + reg_loss * beta
+            
             if self.args.discrete:
+                loss = act_enc_loss
                 log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
             else:
+                act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
+                reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
+                loss = act_plan_loss + reg_loss * beta
                 log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
         return record(loss,self.metrics['valid_loss'])
