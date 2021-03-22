@@ -280,7 +280,8 @@ class LFPTrainer():
 
                 self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
                 self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
-                self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
+                if not self.discrete:
+                    self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
 
 
         return record(loss, self.metrics['train_loss'])
