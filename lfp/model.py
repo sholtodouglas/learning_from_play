@@ -128,7 +128,7 @@ def create_encoder(obs_dim, act_dim,
     return Model([obs, acts], mixture)
 
 
-def create_discrete_encoder(obs_dim, act_dim, layer_size=2048, vocab_size=1024):
+def create_discrete_encoder(obs_dim, act_dim, layer_size=2048, latent_dim=1024, **kwargs):
     # Input #
     obs = Input(shape=(None, obs_dim), dtype=tf.float32, name='obs')
     acts = Input(shape=(None, act_dim), dtype=tf.float32, name='acts')
