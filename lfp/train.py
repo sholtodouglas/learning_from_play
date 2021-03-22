@@ -10,6 +10,7 @@ from tensorflow.distribute import ReduceOp
 from tensorflow.keras import mixed_precision
 import tensorflow_probability as tfp
 tfd = tfp.distributions
+tfpl = tfp.layers
 import lfp
 import os
 import wandb
