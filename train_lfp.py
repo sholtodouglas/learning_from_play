@@ -38,6 +38,7 @@ parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
+parser.add_argument('-vq', '--discrete', default=False, action='store_true')
 parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -186,7 +187,10 @@ def train_setup():
         planner = None
     else:
         model_params['layer_size'] = args.encoder_layer_size
-        encoder = lfp.model.create_encoder(**model_params)
+        if args.discrete:
+          encoder = lfp.model.create_discrete_encoder(**model_params)
+        else:
+          encoder = lfp.model.create_encoder(**model_params)
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
 

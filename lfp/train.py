@@ -72,7 +72,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, optimizer=Adam(), strategy=None, global_batch_size=32):
+    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, optimizer=Adam, strategy=None, global_batch_size=32):
 
         self.actor = actor
         self.encoder = encoder
@@ -158,7 +158,6 @@ class LFPTrainer():
         This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
         variable sequence lengths over entire batches rather than in the dataloader, which should speed
         us up a lot while retaining the data aug!
-        PS: It actually speeds up training, bringing it in line with pre-compute
         '''
     
         B = batch['obs'].shape[0]

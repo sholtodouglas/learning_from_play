@@ -8,6 +8,7 @@ from tensorflow.python.lib.io import file_io
 from lfp.data import decode_image
 import imageio
 import lfp
+from tqdm import tqdm
 
 reducer = umap.UMAP(metric='cosine', random_state=42)
 
@@ -168,20 +169,24 @@ def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn
     if args.images:
         batch_imgs, batch_proprioceptive_features, batch_goal_imgs = batch['imgs'][:num_take, :40, :], batch['proprioceptive_features'][:num_take, :40, :], batch['goal_imgs'][:num_take, 0, :]
         
-        batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
+        full_imgs =  np.concatenate([imgs, batch_imgs])
+        full_proprioceptive_features = np.concatenate([proprioceptive_features, batch_proprioceptive_features])
+        full_goal_imgs = np.concatenate([goal_imgs, batch_goal_imgs])
+        #batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
         # do this so that we can fit it all in memory
-        indices = list(np.arange(0, len(imgs), len(batch_states)))+[len(imgs)]
+        indices = list(np.arange(0, len(full_imgs), args.batch_size))+[len(full_imgs)]
         obs_stack, goal_stack = [],[]
-        for i in range(0, len(indices)-1):
+        for i in tqdm(range(0, len(indices)-1)):
             start, stop = indices[i], indices[i+1]
-            obs, goals = lfp.utils.images_to_2D_features(imgs[start:stop], proprioceptive_features[start:stop], goal_imgs[start:stop], cnn)
+            obs, goals = lfp.utils.images_to_2D_features(full_imgs[start:stop], full_proprioceptive_features[start:stop], full_goal_imgs[start:stop], cnn)
             obs_stack.append(obs), goal_stack.append(goals)
         obs, goals = tf.concat(obs_stack, 0), tf.concat(goal_stack, 0)
 
+    else:
+        obs  = np.concatenate([obs, batch_states])
+        goals = np.concatenate([goals, batch_goals])
 
-    obs  = np.concatenate([obs, batch_states])
     acts = np.concatenate([acts, batch_acts])
-    goals = np.concatenate([goals, batch_goals])
     initial_state = obs[:, 0, :]
     z_enc = encoder((obs,acts)).sample()
     z_plan = planner((initial_state, goals)).sample()
@@ -199,15 +204,15 @@ def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cn
     reducer.fit(z_combined)
     l = len(z_enc)
     z_embed = reducer.transform(z_combined)
-    z_enc = z_embed[:l]
-    z_plan = z_embed[l:]
-    fig_plan, scatter, ax_plan = project_labelled_latents(z_plan, colors + batch_colors, bucket)
+    z_enc_embed = z_embed[:l]
+    z_plan_embed = z_embed[l:]
+    fig_plan, scatter, ax_plan = project_labelled_latents(z_plan_embed, colors + batch_colors, bucket)
 
     if for_live_plotting:
-        return fig_plan, ax_plan, z_plan, colors
+        return fig_plan, ax_plan, z_plan_embed, colors
     else:
-        fig_enc, scatter, _ = project_labelled_latents(z_enc, colors + batch_colors, bucket)
-        return fig_enc, fig_plan
+        fig_enc, scatter, _ = project_labelled_latents(z_enc_embed, colors + batch_colors, bucket)
+        return fig_enc, fig_plan, z_enc, z_plan
 
 
 

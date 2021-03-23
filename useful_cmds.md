@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp3
+export TPU_NAME=lfp2
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -31,7 +31,7 @@ ctpu up \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
 --tpu-size=$TPU_SIZE \
---machine-type=e2-medium \
+--machine-type=g1-small \
 --disk-size-gb=50
 
 
@@ -96,7 +96,7 @@ To see which python processes are currently running use:
 
 
 python3 train_lfp.py \
-PROB_IM_BIGPLAN_B0_02 \
+PROB_IM_BIGPLAN_B0_03 \
 --train_dataset UR5 UR5_slow_gripper UR5_high_transition \
 --test_dataset UR5_slow_gripper_test \
 -tfr \
@@ -108,7 +108,7 @@ PROB_IM_BIGPLAN_B0_02 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.02 \
+-B 0.03 \
 -t 500000 \
 -wmin 20 \
 -wmax 40 \
