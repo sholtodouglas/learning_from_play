@@ -5,7 +5,7 @@
 * 100 preemptible Cloud TPU v2-8 device(s) in zone us-central1-f
 * 5 on-demand Cloud TPU v3-8 device(s) in zone europe-west4-a
 
-
+- n2 (0.1) are default, e2-medium (0.033) work, g1-small do not work (0.02)
 europe-west4-a, lfp_europe_west4_a
 
 
@@ -31,7 +31,7 @@ ctpu up \
 --tf-version=2.4.1 \
 --name=$TPU_NAME \
 --tpu-size=$TPU_SIZE \
---machine-type=g1-small \
+--machine-type=e2-medium\
 --disk-size-gb=50
 
 
@@ -102,7 +102,7 @@ PROB_IM_BIGPLAN_B0_03 \
 -tfr \
 -s GCS \
 -d TPU \
--b 16 \
+-b 32 \
 -la 2048 \
 -le 512 \
 -lp 2048 \
