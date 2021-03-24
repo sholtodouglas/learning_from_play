@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp1
+export TPU_NAME=lfp5
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
