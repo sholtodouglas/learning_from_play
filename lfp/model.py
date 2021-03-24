@@ -236,8 +236,8 @@ class cnn(tf.keras.Model):
         # Transpose it to [N, C, H, W], then reshape to [N * C, H * W] to compute softmax
         # jointly over the image dimensions. 
         N, H, W, C = pre_softmax.shape
-        x = tf.reshape(tf.transpose(x, [0, 3, 1, 2]), [N * C, H * W])
-        softmax = tf.nn.softmax(x)
+        pre_softmax = tf.reshape(tf.transpose(pre_softmax, [0, 3, 1, 2]), [N * C, H * W])
+        softmax = tf.nn.softmax(pre_softmax)
         # Reshape and transpose back to original format.
         softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1])
         x = self.flatten(softmax)
