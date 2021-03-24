@@ -95,7 +95,7 @@ class LFPTrainer():
             actor_clip = 400.0
             encoder_clip = 30.0
             planner_clip = 1.0
-            cnn_clip = 100.0
+            cnn_clip = 10.0
 
         self.actor_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=actor_clip)
         self.encoder_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
