@@ -90,14 +90,17 @@ class LFPTrainer():
             actor_clip  = 0.06
             encoder_clip = 0.03
             planner_clip = 0.001
+            cnn_clip = 10 # TODO find value if doing non de
         else:
             actor_clip = 400.0
             encoder_clip = 30.0
             planner_clip = 1.0
+            cnn_clip = 100.0
 
         self.actor_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=actor_clip)
         self.encoder_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
         self.planner_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=planner_clip)
+        self.cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=cnn_clip)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
@@ -109,6 +112,7 @@ class LFPTrainer():
         self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
         self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
         self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
+        self.metrics['cnn_grad_norm'] = tf.keras.metrics.Mean(name='cnn_grad_norm')
 
         self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
 
@@ -243,7 +247,7 @@ class LFPTrainer():
     def train_step(self, inputs, beta):
         inputs = self.make_sequences_variable_length(inputs) 
 
-        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape:
+        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape:
             actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
             if self.args.gcbc:
@@ -265,22 +269,27 @@ class LFPTrainer():
                     actor_gradients = self.compute_fp16_grads(self.actor_optimizer, loss, actor_tape, self.actor)
                     encoder_gradients = self.compute_fp16_grads(self.encoder_optimizer, loss, encoder_tape, self.encoder)
                     planner_gradients = self.compute_fp16_grads(self.planner_optimizer, loss, planner_tape, self.planner)
+                    if self.args.images: cnn_gradients = self.compute_fp16_grads(self.cnn_optimizer, loss, planner_tape, self.cnn)
                 else:
                     actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                     encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
                     planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
+                    if self.args.images: cnn_gradients = cnn_tape.gradient(loss, self.cnn.trainable_variables)
 
                 actor_norm = record(tf.linalg.global_norm(actor_gradients), self.metrics['actor_grad_norm'])
                 encoder_norm = record(tf.linalg.global_norm(encoder_gradients), self.metrics['encoder_grad_norm'])
                 planner_norm = record(tf.linalg.global_norm(planner_gradients), self.metrics['planner_grad_norm'])
+                if self.args.images: cnn_norm = record(tf.linalg.global_norm(cnn_gradients), self.metrics['cnn_grad_norm'])
 
                 gradients = actor_gradients + encoder_gradients + planner_gradients
+                if self.args.images: gradients += cnn_gradients
+
                 record(tf.linalg.global_norm(gradients), self.metrics['global_grad_norm'])
 
                 self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
                 self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
-                if not self.args.discrete:
-                    self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
+                if not self.args.discrete: self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables)) # TODO TRAIN AS SECOND STAGE
+                if self.args.images: self.cnn_optimizer.apply_gradients(zip(cnn_gradients, self.cnn.trainable_variables))
 
 
         return record(loss, self.metrics['train_loss'])
