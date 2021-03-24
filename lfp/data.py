@@ -148,7 +148,7 @@ class PlayDataloader():
         self.shuffle_size = int(batch_size * (window_size / window_shift)) if shuffle_size is None else shuffle_size
         if self.include_imgs:
             self.window_shift = 2
-            self.shuffle_size *= 4
+            #self.shuffle_size *= 4
             
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
