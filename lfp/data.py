@@ -23,17 +23,19 @@ pp = pprint.PrettyPrinter(indent=4)
 dimensions = {'Unity': {'obs': 19,
                         'acts': 7,
                         'achieved_goals': 12,
+                        'shoulder_img_hw':256,
                         'hz': 15},
               'Pybullet': {'obs': 18,
                         'acts': 7,
                         'achieved_goals': 11,
+                        'shoulder_img_hw':200,
                         'hz': 25}}
 
 
 # TF record specific @ Tristan maybe we can clean this by having the one dict and a function which handles which parse to use?
 def decode_shoulder_img(image_data, image_hw=256):
     image = tf.image.decode_jpeg(image_data, channels=3)
-    image = tf.reshape(image, [256,image_hw, 3]) # explicit size needed for TPU
+    image = tf.reshape(image, [image_hw,image_hw, 3]) # explicit size needed for TPU
     return image
 
 def decode_gripper_img(image_data):
@@ -64,7 +66,7 @@ def read_tfrecord(include_imgs=False, include_gripper_imgs=False, sim='Unity'):
         output['sequence_index'] = tf.cast(data['sequence_index'], tf.int32)
         output['sequence_id'] = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
         if include_imgs:
-            output['img'] = decode_shoulder_img(data['img'])
+            output['img'] = decode_shoulder_img(data['img'], dimensions[sim]['shoulder_img_hw'])
         if include_gripper_imgs:
             output['gripper_img'] = decode_gripper_img(data['gripper_img'])
 

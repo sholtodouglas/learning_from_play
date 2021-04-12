@@ -5,7 +5,7 @@ import tensorflow as tf
 import io
 from io import BytesIO
 from tensorflow.python.lib.io import file_io
-from lfp.data import decode_image
+from lfp.data import decode_shoulder_img, dimensions
 import imageio
 import lfp
 from tqdm import tqdm
@@ -83,7 +83,7 @@ def load_GCS_safe(path):
 
 def load_img(path, args):
     if args.data_source == 'GCS':
-        return decode_image(tf.io.read_file(path))
+        return decode_shoulder_img(tf.io.read_file(path), dimensions[args.sim]['shoulder_img_hw'])
     else:
         return np.array(imageio.imread(path, as_gray=False, pilmode="RGB"))
 
