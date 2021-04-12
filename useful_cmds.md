@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp5
+export TPU_NAME=lfp1
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -138,5 +138,24 @@ IM_BIGPLAN_B0_00003 \
 -wmax 40 \
 -i \
 -tfr \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME
+
+
+python3 train_lfp.py \
+UnityB0_01 \
+--train_dataset Unity/UR5_train \
+--test_dataset Unity/UR5_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 512 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.01 \
+-n 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
