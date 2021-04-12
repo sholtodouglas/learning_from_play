@@ -38,6 +38,8 @@ parser.add_argument('-t', '--train_steps', type=int, default=200000)
 parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
+parser.add_argument('-gi', '--gripper_images', default=False, action='store_true')
+parser.add_argument('-sim', '--sim', default='Unity', help='Unity/Pybullet')
 parser.add_argument('-vq', '--discrete', default=False, action='store_true')
 parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
@@ -156,7 +158,7 @@ else:
 # # Dataset
 
 GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
-dl = lfp.data.PlayDataloader(include_imgs = args.images, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
+dl = lfp.data.PlayDataloader(include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
 
 # Train data
 train_data = dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords)

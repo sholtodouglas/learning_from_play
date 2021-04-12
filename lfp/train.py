@@ -160,8 +160,8 @@ class LFPTrainer():
     def make_sequences_variable_length(self, batch):
         '''
         This is a rather gross tiling/casting/indexing function - but it very effectively vectorises 
-        variable sequence lengths over entire batches rather than in the dataloader, which should speed
-        us up a lot while retaining the data aug!
+        variable sequence lengths over entire batches rather than in the dataloader, which brings us within 80% of precomputed speed
+        while retaining full data aug!
         '''
     
         B = batch['obs'].shape[0]
@@ -190,11 +190,17 @@ class LFPTrainer():
             # End goal specific stuff, start img specific stuff
             batch['imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
             batch['proprioceptive_features'] *= multiply_mask
+
+            if self.args.gripper_images:
+                batch['gripper_imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
         else:
             goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
             tile_dims = tf.constant([1, self.args.window_size_max, 1], tf.int32) 
             goals = tf.tile(goals, tile_dims) # B, T, achieved_goal_dim
             batch['goals'] *= multiply_mask# B, T, achieved_goal_dim
+
+
+
 
         return batch
 
