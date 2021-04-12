@@ -292,14 +292,14 @@ while t < args.train_steps:
     if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
         if not args.gcbc and not args.images:
-          z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+        #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
-          #Comet
-          experiment.log_figure('z_enc', z_enc, step=t)
-          experiment.log_figure('z_plan', z_plan,step=t)
+        #   #Comet
+        #   experiment.log_figure('z_enc', z_enc, step=t)
+        #   experiment.log_figure('z_plan', z_plan,step=t)
 
-          # WandB
-          wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
+        #   # WandB
+        #   wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
 
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)
