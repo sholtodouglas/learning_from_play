@@ -209,7 +209,7 @@ def create_vision_network(img_height, img_width, embedding_size = 256):
   Dense(embedding_size),  
 ], name = 'feature_encoder')
 
-# Has a cheeky 20M params but ok. This is the option which uses spatial softmax. 
+# Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
     def __init__(self,  img_height=200, img_width = 200, img_channels=3, embedding_size=64):
@@ -220,7 +220,7 @@ class cnn(tf.keras.Model):
         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
         self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu', name='c1')
         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
-        self.conv3 = Conv2D(64, 3, strides=(2,2), padding='same', activation='relu', name='c3')
+        self.conv3 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c3')
         self.conv4 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c4')
         # In between these, do a spatial softmax
         self.flatten = Flatten()
