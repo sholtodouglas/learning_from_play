@@ -29,6 +29,7 @@ parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='L
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
 parser.add_argument('-lp', '--planner_layer_size', default=2048, type=int, help='Layer size of planner, increases size of neural net')
 parser.add_argument('-embd', '--img_embedding_size', default=64, type=int, help='Embedding size of features,goal space')
+parser.add_argument('-g_embd', '--gripper_img_embedding_size', default=32, type=int, help='Embedding size of features,goal space')
 parser.add_argument('-z', '--latent_dim', default=256, type=int, help='Size of the VAE latent space')
 parser.add_argument('-g', '--gcbc', default=False, action='store_true', help='Enables GCBC, a simpler model with no encoder/planner')
 parser.add_argument('-n', '--num_distribs', default=None, type=int, help='Number of distributions to use in logistic mixture model')
@@ -176,11 +177,15 @@ valid_dataset = dl.load(valid_data)
 from lfp.train import LFPTrainer
 
 def train_setup():
+    # TODO: Account for gripper dims
     model_params = {'obs_dim':args.img_embedding_size + dl.proprioceptive_features_dim if args.images else dl.obs_dim,
                 'goal_dim':args.img_embedding_size if args.images else dl.goal_dim,
                 'act_dim':dl.act_dim,
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
+
+    if args.gripper_imgs: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
+        model_params['obs_dim'] += args.gripper_img_embedding_size 
 
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
@@ -199,12 +204,15 @@ def train_setup():
     if args.images:
       cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
       lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
+      if args.gripper_images:
+        gripper_cnn = lfp.model.cnn(dl.gripper_img_size, dl.gripper_img_size, embedding_size=args.gripper_img_embedding_size)
+        lfp.utils.build_cnn(gripper_cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
     else:
-      cnn = None
+      cnn, gripper_cnn = None, None
 
     #optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
     optimizer = optimizer = tf.optimizers.Adam
-    trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
+    trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, gripper_cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
     return actor, encoder, planner, cnn, trainer
 
 if args.device=='CPU' or args.device=='GPU':
