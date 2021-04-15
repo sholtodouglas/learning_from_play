@@ -200,10 +200,11 @@ class LFPTrainer():
             if self.args.gripper_images:
                 batch['gripper_imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
         else:
+            
             goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
             tile_dims = tf.constant([1, self.args.window_size_max, 1], tf.int32) 
             goals = tf.tile(goals, tile_dims) # B, T, achieved_goal_dim
-            batch['goals'] *= multiply_mask# B, T, achieved_goal_dim
+            batch['goals'] = goals*multiply_mask# B, T, achieved_goal_dim
 
         return batch
 
