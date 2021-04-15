@@ -184,7 +184,7 @@ def train_setup():
                 'layer_size':args.actor_layer_size, 
                 'latent_dim':args.latent_dim}
 
-    if args.gripper_imgs: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
+    if args.gripper_images: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
         model_params['obs_dim'] += args.gripper_img_embedding_size 
 
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
