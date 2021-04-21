@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp1
+export TPU_NAME=lfp5
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -64,7 +64,7 @@ cd learning_from_play
 ./setup.sh
 ```
 
-export TPU_NAME=lfp1
+export TPU_NAME=lfp5
 export BUCKET_NAME=lfp_europe_west4_a
 # Run the sample training script for GCS setup
 
@@ -143,7 +143,7 @@ IM_BIGPLAN_B0_00003 \
 
 
 python3 train_lfp.py \
-UnityB0_01 \
+UnityB0_1 \
 --train_dataset Unity/UR5_train \
 --test_dataset Unity/UR5_test \
 -tfr \
@@ -155,7 +155,57 @@ UnityB0_01 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
+-B 0.1 \
+-n 5 \
+-wmin 20 \
+-wmax 40 \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME
+
+
+
+python3 train_lfp.py \
+PybulletB0_02_2040_lim \
+--train_dataset UR5 \
+--test_dataset UR5_slow_gripper_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 512 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.02 \
+-n 5 \
+-wmin 20 \
+-wmax 40 \
+-sim Pybullet \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME
+
+
+python3 train_lfp.py \
+UNITY_IM_B0_01 \
+--train_dataset Unity/UR5_train \
+--test_dataset Unity/UR5_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 16 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
 -B 0.01 \
+-t 500000 \
+-wmin 20 \
+-wmax 40 \
+-i \
+-gi \
+-tfr \
 -n 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME

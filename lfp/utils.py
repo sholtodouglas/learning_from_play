@@ -3,15 +3,21 @@ import numpy as np
 import tensorflow as tf
 import gym
 
-def load_weights(path, actor, encoder=None, planner=None, cnn=None, step=""):
+def load_weights(path, actor, encoder=None, planner=None, cnn=None,gripper_cnn=None, step=""):
     '''
     Load weights function distinct from the trainer to make deploy operation more lightweight
     '''
     if 'checkpoint' in os.listdir(path):
         # Then it was saved using checkpoints
-        ckpt = tf.train.Checkpoint(step=tf.Variable(1), actor=actor, encoder=encoder, planner=planner)
-        if cnn is not None: # Also load cnn if that is 
+        
+        
+        if gripper_cnn is not None and cnn is not None:
+            ckpt = tf.train.Checkpoint(step=tf.Variable(1), actor=actor, encoder=encoder, planner=planner, cnn=cnn, gripper_cnn=gripper_cnn)
+        elif cnn is not None: # Also load cnn if that is 
             ckpt = tf.train.Checkpoint(step=tf.Variable(1), actor=actor, encoder=encoder, planner=planner, cnn=cnn)
+        else:
+            ckpt = tf.train.Checkpoint(step=tf.Variable(1), actor=actor, encoder=encoder, planner=planner)
+            
         ckpt.restore(tf.train.latest_checkpoint(path)).expect_partial()
         print('Checkpoint restored')
     else:

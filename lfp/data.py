@@ -9,16 +9,8 @@ from tqdm import tqdm
 
 pp = pprint.PrettyPrinter(indent=4)
 
-import glob
-import tensorflow as tf
-import os
-import numpy as np
-from natsort import natsorted
-import sklearn
-import pprint
-from tqdm import tqdm
-
-pp = pprint.PrettyPrinter(indent=4)
+from io import BytesIO
+from tensorflow.python.lib.io import file_io
 
 dimensions = {'Unity': {'obs': 19,
                         'acts': 7,
@@ -183,6 +175,11 @@ class PlayDataloader():
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset, self.sim)
+        if self.normalize:
+            src = str(paths[0]+'/normalisation.npz')
+            f = BytesIO(file_io.read_file_to_string(src, binary_mode=True))
+            self.normalising_constants = np.load(f)
+
         return dataset
     
     def transform(self, dataset):
@@ -197,9 +194,17 @@ class PlayDataloader():
         # act in joint space
         acts = dataset['acts']
 
+        ags = dataset['achieved_goals']
+
+        if self.normalize:
+            obs = obs - self.normalising_constants['obs_mean']
+            acts = acts - self.normalising_constants['acts_mean']
+            ags = ags - self.normalising_constants['ag_mean']
+
+
         return_dict = {'obs': obs,
                 'acts': acts,
-                'goals': dataset['achieved_goals'], # use this for the goal tiling on device
+                'goals': ags, # use this for the goal tiling on device
                 'dataset_path': dataset['sequence_id'],
                 'tstep_idxs': dataset['sequence_index']}
 
@@ -209,7 +214,7 @@ class PlayDataloader():
             return_dict['proprioceptive_features'] = obs[:7]
         if self.include_gripper_imgs:
             return_dict['gripper_imgs'] = dataset['gripper_img']
-
+        
         # TODO: Tristan with images we may not want to return the normal goals/states at all  just straight sub out
         return return_dict
 
