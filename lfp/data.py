@@ -176,7 +176,7 @@ class PlayDataloader():
             dataset = extract_npz(paths)
         # self.print_minutes(dataset, self.sim)
         if self.normalize:
-            src = str(paths[0]+'/normalisation.npz')
+            src = str(paths[0])+'/normalisation.npz'
             f = BytesIO(file_io.read_file_to_string(src, binary_mode=True))
             self.normalising_constants = np.load(f)
 
