@@ -197,9 +197,9 @@ class PlayDataloader():
         ags = dataset['achieved_goals']
 
         if self.normalize:
-            #obs = obs - self.normalising_constants['obs_mean']
+            obs = obs - self.normalising_constants['obs_mean']
             acts = acts - self.normalising_constants['acts_mean']
-            #ags = ags - self.normalising_constants['ag_mean']
+            ags = ags - self.normalising_constants['ag_mean']
 
 
         return_dict = {'obs': obs,
