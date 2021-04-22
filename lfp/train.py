@@ -96,8 +96,8 @@ class LFPTrainer():
         else:
             actor_clip = 400.0
             encoder_clip = 30.0
-            planner_clip = 1.0
-            cnn_clip = 10.0
+            planner_clip = 5.0
+            cnn_clip = 20.0
             gripper_cnn_clip = 10.0
 
         # bit boiler platy having them all separate, but it makes tracking separate gradients really clean
@@ -150,13 +150,15 @@ class LFPTrainer():
         else:
             per_example_loss = self.mae_action_loss(labels, predictions) * mask
 
+        print(per_example_loss.shape)
+
         per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
         return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
 
     def compute_MAE(self, labels, predictions, mask, seq_lens, weightings=None):
-        per_example_loss = self.mae_action_loss(labels, predictions) * mask
-        per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
+        per_example_loss = self.mae_action_loss(labels, predictions) * mask # B,T,D
+        per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep -> B,D
         return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
     def compute_regularisation_loss(self, plan, encoding):
