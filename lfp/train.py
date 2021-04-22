@@ -136,6 +136,12 @@ class LFPTrainer():
         self.metrics['valid_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
         self.metrics['valid_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
+        self.metrics['valid_enc_position_loss'] = tf.keras.metrics.Mean(name='valid_enc_position_loss')
+        self.metrics['valid_enc_max_position_loss'] = lfp.metric.MaxMetric(name='valid_enc_max_position_loss')
+        self.metrics['valid_enc_rotation_loss'] = tf.keras.metrics.Mean(name='valid_enc_rotation_loss')
+        self.metrics['valid_enc_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_enc_max_rotation_loss')
+        self.metrics['valid_enc_gripper_loss'] = tf.keras.metrics.Mean(name='valid_enc_rotation_loss')
+
         self.chkpt_manager = None
 
     def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
@@ -340,6 +346,8 @@ class LFPTrainer():
                 loss = act_plan_loss + reg_loss * beta
                 log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
+                log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_enc_position_loss'], \
+                                 self.metrics['valid_enc_max_position_loss'], self.metrics['valid_enc_rotation_loss'], self.metrics['valid_enc_max_rotation_loss'], self.metrics['valid_enc_gripper_loss'], self.compute_MAE)
         return record(loss,self.metrics['valid_loss'])
 
 
