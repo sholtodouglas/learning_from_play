@@ -170,7 +170,8 @@ class PlayDataloader():
         if from_tfrecords:
             record_paths = []
             for p in paths:
-                record_paths += tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
+                records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
+                record_paths += [pth for pth in records if 'tags' not in pth and 'labels' not in pth]
             dataset = extract_tfrecords(record_paths, self.include_imgs, self.include_gripper_imgs, self.sim, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
@@ -253,3 +254,120 @@ class PlayDataloader():
 
         pp.pprint(dataset.element_spec)
         return dataset
+
+
+
+
+
+#########################################################################################################################################################################################################
+################################################################### For reading datasets which are made of full trajectories (e.g the sentence labelled trajectories) ###################################
+#########################################################################################################################################################################################################
+
+
+def read_traj_tfrecord(example):
+    LABELED_TFREC_FORMAT = {
+            'obs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'acts':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'goals':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'seq_lens':tf.io.FixedLenFeature([], tf.int64),
+            'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'gripper_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'label':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+    }
+    data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+    
+    obs = tf.io.parse_tensor(data['obs'], tf.float32) 
+    acts = tf.io.parse_tensor(data['acts'], tf.float32) 
+    goals = tf.io.parse_tensor(data['goals'], tf.float32)  
+    seq_lens = tf.cast(data['seq_lens'], tf.int32) # this is meant to be 32 even though you serialize as 64
+    masks = tf.io.parse_tensor(data['masks'], tf.float32) 
+    imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)
+    gripper_imgs = tf.io.parse_tensor(data['gripper_imgs'], tf.uint8)
+    goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)   
+    proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
+    label = tf.io.parse_tensor(data['label'], tf.string)
+    
+
+
+    
+    # img = decode_image(data['img'])
+
+    return {  'obs':obs,
+              'acts':acts,
+              'goals':goals,
+              'seq_lens':seq_lens,
+              'masks':masks,
+              'imgs':imgs,
+              'gripper_imgs':gripper_imgs,
+              'goal_imgs':goal_imgs,
+              'proprioceptive_features':proprioceptive_features,
+              'label': label}
+
+
+def load_traj_tf_records(filenames, ordered=False):
+    # Read from TFRecords. For optimal performance, reading from multiple files at once and
+    # disregarding data order. Order does not matter since we will be shuffling the data anyway.
+
+    # check, does this ignore intra order or just inter order? Both are an issue!
+    ignore_order = tf.data.Options()
+    if not ordered:
+        ignore_order.experimental_deterministic = False # disable order, increase speed
+
+    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=4) # 
+    dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
+    dataset = dataset.map(read_traj_tfrecord, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    return dataset
+
+
+class labelled_dl():
+        def __init__(self, 
+            filenames,
+            label_type='tags',  # 'tags' for numbered types or 'labels'
+            window_size=40,
+            num_workers=4,
+            batch_size=64,
+            shuffle_size=32,
+            normalize=False):
+        
+            self.filenames = filenames
+            self.window_size = window_size
+            self.num_workers = num_workers
+            self.batch_size = batch_size
+            self.shuffle_size = shuffle_size
+            self.normalize = normalize
+
+            if self.normalize:
+                src = str(filenames[0])+'/normalisation.npz'
+                f = BytesIO(file_io.read_file_to_string(src, binary_mode=True))
+                self.normalising_constants = np.load(f)
+
+            self.prefetch_size = tf.data.experimental.AUTOTUNE
+
+            labelled_paths = []
+            for p in filenames:
+                records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
+                labelled_paths += [pth for pth in records if label_type  in pth]
+
+            self.dataset = load_traj_tf_records(labelled_paths)
+
+            self.dataset = (self.dataset
+                        .map(self.transform, num_parallel_calls=self.num_workers)
+                        .repeat()
+                        .shuffle(self.shuffle_size)
+                        .batch(self.batch_size, drop_remainder=True)
+                        .prefetch(self.prefetch_size))
+            
+        
+        
+        def transform(self, dataset):
+                # tile out the goal img
+
+            if self.normalize:
+                dataset['obs'] = dataset['obs'] - self.normalising_constants['obs_mean']
+                dataset['acts'] = dataset['acts'] - self.normalising_constants['acts_mean']
+                dataset['goals'] = dataset['goals'] - self.normalising_constants['ag_mean']
+
+            return dataset

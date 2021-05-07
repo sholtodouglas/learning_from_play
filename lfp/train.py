@@ -217,23 +217,62 @@ class LFPTrainer():
         return batch
 
 
-    def step(self, inputs):
+    def step(self, inputs=None, lang_labelled_inputs=None, external_videos=None): # one of these must not be none, but either can be
         '''
         A function which wraps the shared processing between train and test step
         '''
         states, actions,  goals = inputs['obs'], inputs['acts'], inputs['goals']
+
+        # We want to concatenate the normal batch, lang_labelled_batch, and external videos, so that we can pass them all through 
+        # the encoder at once, at the end, we'd like to return the langlabelled encodings(i.e encodings of lang labelled inputs and 
+        # external videos), paired with their appropriate labels so that we can use contrastive losses on them 
+
+        # Get the lengths of each, store that in a dictionary of indices 
+        indices = {'len_lang_unlablled': len(actions)} 
+
+        # if images, concat imgs, prorpioceptive_features, goal_imgs, not gripper_imgs - that can only be used where we have action labels
 
         # 1. When using imagesChange the definition of obs_dim to feature encoder dim + proprioceptive features
         # 2. Reshape imgs to B*T H W C.
         # 3. Sub in for states and goals.
         # 4. THen there should be no further changes!
         if self.args.images:
+            
+            # [B_unlab,T,H,W,C], [B_unlab,T,D], [B_unlab,T,H,W,C]
             imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
+
+            # Frankly only care about these in the context of images
+            if self.args.use_lang_labelled:
+                # tile out on device for speed / halves data transfer  
+                lang_labelled_inputs['goal_imgs'] = tf.tile(lang_labelled_inputs['goal_imgs'], [1, len(lang_labelled_inputs['imgs']), 1,1,1])
+
+                indices['len_lang_labelled'] = indices['len_lang_unlabelled'] + len(lang_labelled_inputs['acts'])
+
+                # [B_unlab + Blab, T, D]
+                imgs, propprioceptive_features, goal_imgs, acts = tf.concat([imgs, lang_labelled_inputs['imgs']]),\
+                                                            tf.concat([proprioceptive_features, lang_labelled_inputs['proprioceptive_features']]), \
+                                                            tf.concat([goal_imgs, lang_labelled_inputs['goal_imgs']]), \
+                                                            tf.concat([actions, lang_labelled_inputs['acts']])
+                sentence_labels = lang_labelled_inputs['label_embeddings']
+
+                
+            
+                if self.args.use_contrastive:
+                    indices['len_vids'] =  indices['len_lang_labelled'] + len(external_videos['imgs'])
+                    imgs, goal_imgs = tf.concat([imgs, external_videos['imgs']]), tf.concat([goal_imgs, external_videos['goal_imgs']]) # B_i +Bll, T, H, W, C
+                    sentence_labels = tf.concat([sentence_labels, external_videos['label_embeddings'] ])
+
+                # project the sentence embeddings to the same space as the goal
+                sentence_goal_embeddings = self.language_encoder(sentence_labels)
+
+            # B here will be B_unlab + B_lab + B_vid, feed through all images at the same time because we care about them all 
+            # frankly - maybe we should tile goal only after embedding? I think yes! TODO
             B, T, H, W, C = imgs.shape
             imgs, goal_imgs = tf.reshape(imgs, [B * T, H, W, C]), tf.reshape(goal_imgs, [B * T, H, W, C])
             img_embeddings, goal_embeddings = tf.reshape(self.cnn(imgs), [B, T, -1]), tf.reshape(self.cnn(goal_imgs),[B, T, -1])
-            states = tf.concat([img_embeddings, proprioceptive_features],
-                               -1)  # gets both the image and it's own xyz ori and angle as pose
+            states = tf.concat([img_embeddings, proprioceptive_features], -1)  # gets both the image and it's own xyz ori and angle as pose
+
+            # Todo separate out the language ones here 
             goals = goal_embeddings  # should be B,T, embed_size
             if self.args.gripper_images:
                 gripper_imgs = inputs['gripper_imgs']
@@ -247,6 +286,9 @@ class LFPTrainer():
             distrib = self.actor([states, goals])
             return distrib
         else:
+            # TODO: If check on whether to use actions in the VAE
+            # TODO: Modify encoder to not need actions? Urghghghghghghghghghghghghghghghghghghgh fuck you keras
+            # TODO: Only relevant once contrastive in the works
             encoding = self.encoder([states, actions])
             plan = self.planner([states[:, 0, :], goals[:, 0,
                                                   :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
@@ -266,10 +308,12 @@ class LFPTrainer():
 
             enc_policy = self.actor([states, z_enc_tiled, goals])
             plan_policy = self.actor([states, z_plan_tiled, goals])
+
+            # TODO: Return a dict? That way we can have the indices readily available. 
             return enc_policy, plan_policy, encoding, plan
 
 
-    def train_step(self, inputs, beta):
+    def train_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None):
         inputs = self.make_sequences_variable_length(inputs) 
 
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape:
@@ -281,7 +325,7 @@ class LFPTrainer():
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
-                enc_policy, plan_policy, encoding, plan = self.step(inputs)
+                enc_policy, plan_policy, encoding, plan = self.step(inputs, lang_labelled_inputs, external_videos)
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 if self.args.discrete:
                     loss = act_enc_loss
@@ -325,7 +369,7 @@ class LFPTrainer():
         return record(loss, self.metrics['train_loss'])
 
 
-    def test_step(self, inputs, beta):
+    def test_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None):
         inputs = self.make_sequences_variable_length(inputs) # 
         actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
@@ -335,7 +379,7 @@ class LFPTrainer():
             log_action_breakdown(policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
                                  self.valid_rotation_loss, self.valid_max_rotation_loss, self.valid_gripper_loss, self.compute_MAE)
         else:
-            enc_policy, plan_policy, encoding, plan = self.step(inputs)
+            enc_policy, plan_policy, encoding, plan = self.step(inputs, lang_labelled_inputs, external_videos)
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
             
             if self.args.discrete:
@@ -354,14 +398,14 @@ class LFPTrainer():
 
 
     @tf.function
-    def distributed_train_step(self, dataset_inputs, beta):
-        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta))
+    def distributed_train_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None):
+        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
     @tf.function
-    def distributed_test_step(self, dataset_inputs, beta):
-        per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta))
+    def distributed_test_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None):
+        per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 

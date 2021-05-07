@@ -159,47 +159,66 @@ def project_labelled_latents(z_embed, colors, bucket=True, figsize=(14,14)):
 #         print(indices[i], indices[i+1])
 
 
-def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
-    '''
-    Separating this out for reuse in live model display 
-    '''
-    obs, acts, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = get_labelled_trajs(TEST_DATA_PATH, bucket=bucket, args=args)
-    batch_states,batch_acts, batch_goals, batch_colors = batch['obs'][:num_take, :40, :],batch['acts'][:num_take, :40, :], batch['goals'][:num_take, 0, :], [[0.8,0.8,0.8,0.6]]*num_take
+# def get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True):
+#     '''
+#     Separating this out for reuse in live model display 
+#     '''
+#     obs, acts, goals, labels, colors, paths, imgs, goal_imgs, proprioceptive_features = get_labelled_trajs(TEST_DATA_PATH, bucket=bucket, args=args)
+#     batch_states,batch_acts, batch_goals, batch_colors = batch['obs'][:num_take, :40, :],batch['acts'][:num_take, :40, :], batch['goals'][:num_take, 0, :], [[0.8,0.8,0.8,0.6]]*num_take
 
-    if args.images:
-        batch_imgs, batch_proprioceptive_features, batch_goal_imgs = batch['imgs'][:num_take, :40, :], batch['proprioceptive_features'][:num_take, :40, :], batch['goal_imgs'][:num_take, 0, :]
+#     if args.images:
+#         batch_imgs, batch_proprioceptive_features, batch_goal_imgs = batch['imgs'][:num_take, :40, :], batch['proprioceptive_features'][:num_take, :40, :], batch['goal_imgs'][:num_take, 0, :]
         
-        full_imgs =  np.concatenate([imgs, batch_imgs])
-        full_proprioceptive_features = np.concatenate([proprioceptive_features, batch_proprioceptive_features])
-        full_goal_imgs = np.concatenate([goal_imgs, batch_goal_imgs])
-        #batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
-        # do this so that we can fit it all in memory
-        indices = list(np.arange(0, len(full_imgs), args.batch_size))+[len(full_imgs)]
-        obs_stack, goal_stack = [],[]
+#         full_imgs =  np.concatenate([imgs, batch_imgs])
+#         full_proprioceptive_features = np.concatenate([proprioceptive_features, batch_proprioceptive_features])
+#         full_goal_imgs = np.concatenate([goal_imgs, batch_goal_imgs])
+#         #batch_states, batch_goals = lfp.utils.images_to_2D_features(batch_imgs, batch_proprioceptive_features, batch_goal_imgs, cnn)
+#         # do this so that we can fit it all in memory
+#         indices = list(np.arange(0, len(full_imgs), args.batch_size))+[len(full_imgs)]
+#         obs_stack, goal_stack = [],[]
+#         for i in tqdm(range(0, len(indices)-1)):
+#             start, stop = indices[i], indices[i+1]
+#             obs, goals = lfp.utils.images_to_2D_features(full_imgs[start:stop], full_proprioceptive_features[start:stop], full_goal_imgs[start:stop], cnn)
+#             obs_stack.append(obs), goal_stack.append(goals)
+#         obs, goals = tf.concat(obs_stack, 0), tf.concat(goal_stack, 0)
+
+#     else:
+#         obs  = np.concatenate([obs, batch_states])
+#         goals = np.concatenate([goals, batch_goals])
+
+#     acts = np.concatenate([acts, batch_acts])
+#     initial_state = obs[:, 0, :]
+#     z_enc = encoder((obs,acts)).sample()
+#     z_plan = planner((initial_state, goals)).sample()
+#     return z_enc, z_plan, colors, batch_colors
+
+
+def get_latent_vectors(unlabelled_batch, labelled_batch, trainer, args):
+    labels = [x.numpy().decode("utf-8")  for x in list(labelled_batch['label'])]
+    colors = [bucket_colors[x] for x in labels]
+    unlabelled_colors = [[0.8,0.8,0.8,0.6]]*len(unlabelled_batch['obs'])
+
+    def compute_batch(batch, trainer, args):
+        full_len = len(batch[list(batch.keys())[0]]) # this may be multiple batches or a mega batch from labels
+        indices = list(np.arange(0, full_len, args.batch_size))+[full_len]
+        encodings, plans = [], []
         for i in tqdm(range(0, len(indices)-1)):
             start, stop = indices[i], indices[i+1]
-            obs, goals = lfp.utils.images_to_2D_features(full_imgs[start:stop], full_proprioceptive_features[start:stop], full_goal_imgs[start:stop], cnn)
-            obs_stack.append(obs), goal_stack.append(goals)
-        obs, goals = tf.concat(obs_stack, 0), tf.concat(goal_stack, 0)
+            minibatch = {k : v[start:stop] for k,v in batch.items()}
+            _,_, encoding, plan = trainer.step(minibatch)
+            encodings.append(encoding.sample()), plans.append(plan.sample())
+        return np.vstack(encodings), np.vstack(plans)
 
-    else:
-        obs  = np.concatenate([obs, batch_states])
-        goals = np.concatenate([goals, batch_goals])
+    e_unlab, p_unlab = compute_batch(unlabelled_batch, trainer, args)
+    e_lab, p_lab = compute_batch(labelled_batch, trainer, args)
 
-    acts = np.concatenate([acts, batch_acts])
-    initial_state = obs[:, 0, :]
-    z_enc = encoder((obs,acts)).sample()
-    z_plan = planner((initial_state, goals)).sample()
-    return z_enc, z_plan, colors, batch_colors
+    enc, plan = np.vstack([e_lab, e_unlab]), np.vstack([p_lab, p_unlab])
+    return enc, plan, colors, unlabelled_colors
 
 
-
-def produce_cluster_fig(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn=None, bucket=True, for_live_plotting=False):
-    '''
-
-    Note: TODO Hard to have sufficient memory to do this in one pop - need to implement some batching logic for imgs
-    '''
-    z_enc, z_plan, colors, batch_colors = get_latent_vectors(batch,encoder,planner,TEST_DATA_PATH, num_take, args, cnn, bucket)
+def produce_cluster_fig(unlabelled_batch, labelled_batch, trainer, args, bucket=True, for_live_plotting=False):
+    labelled_batch['goal_imgs'] = tf.tile(labelled_batch['goal_imgs'], [len(dataset['images']), 1,1,1])
+    z_enc, z_plan, colors, batch_colors = get_latent_vectors(unlabelled_batch, labelled_batch, trainer, args)
     z_combined = tf.concat([z_enc, z_plan], axis = 0)
     reducer.fit(z_combined)
     l = len(z_enc)
