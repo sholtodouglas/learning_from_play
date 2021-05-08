@@ -453,7 +453,7 @@ class LFPTrainer():
                     self.cnn_optimizer.apply_gradients(zip(cnn_gradients, self.cnn.trainable_variables))
                     self.img_embed_mapper_optimizer.apply_gradients(zip(img_goal_mapper_grads, self.self.img_embed_to_goal_space.trainable_variables))
                 if self.args.gripper_images: self.gripper_cnn_optimizer.apply_gradients(zip(gripper_cnn_gradients, self.gripper_cnn.trainable_variables))
-                if self.use_language: self.lang_embed_mapper_optimizer.apply_gradients(zip(lang_goal_mapper_grads, self.self.lang_embed_to_goal_space.trainable_variables))
+                if self.args.use_language: self.lang_embed_mapper_optimizer.apply_gradients(zip(lang_goal_mapper_grads, self.self.lang_embed_to_goal_space.trainable_variables))
                 ################### Fin
 
 
