@@ -2,7 +2,6 @@ numpy
 matplotlib==3.2.2
 plotly==4.4.1
 seaborn
-pybullet>=3.0.8
 wandb
 tensorflow>=2.4.0
 tensorflow-probability
