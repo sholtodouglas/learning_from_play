@@ -273,7 +273,7 @@ while t < args.train_steps:
         # Plot on WandB
         wandb.log(metrics, step=t)
 
-    if (t+1) % save_inc == 0:
+    if (t+0) % save_inc == 0: # zero while we test this
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
 
         # How we plot the cluster figs
@@ -291,7 +291,7 @@ while t < args.train_steps:
         #   experiment.log_figure('z_plan', z_plan,step=t)
 
         # WandB
-        wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
+        wandb.log({'z_enc':lfp.plotting.plot_to_image(fig_enc), 'z_plan':lfp.plotting.plot_to_image(fig_plan)}, step=t)
 
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)
