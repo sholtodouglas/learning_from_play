@@ -194,30 +194,33 @@ def project_labelled_latents(z_embed, colors, bucket=True, figsize=(14,14)):
 
 
 def get_latent_vectors(unlabelled_batch, labelled_batch, trainer, args):
-    labels = [x.numpy().decode("utf-8")  for x in list(labelled_batch['label'])]
-    colors = [bucket_colors[x] for x in labels]
+    tags = [x.numpy().decode("utf-8")  for x in list(labelled_batch['tags'])]
+    colors = [bucket_colors[x] for x in tags]
     unlabelled_colors = [[0.8,0.8,0.8,0.6]]*len(unlabelled_batch['obs'])
 
-    def compute_batch(batch, trainer, args):
+    def compute_batch(batch, trainer, args, batch_type='unlabelled'):
         full_len = len(batch[list(batch.keys())[0]]) # this may be multiple batches or a mega batch from labels
         indices = list(np.arange(0, full_len, args.batch_size))+[full_len]
         encodings, plans = [], []
         for i in tqdm(range(0, len(indices)-1)):
             start, stop = indices[i], indices[i+1]
             minibatch = {k : v[start:stop] for k,v in batch.items()}
-            _,_, encoding, plan = trainer.step(minibatch)
+            if batch_type =='unlabelled' or not args.use_language: # if we're not using language goals, then just pass the labelled batch through the unlablled path
+                _,_, encoding, plan, batch_indices, sentence_embeddings = trainer.step(minibatch)
+            elif batch_type == 'labelled':
+                _,_, encoding, plan, batch_indices, sentence_embeddings = trainer.step(lang_labelled_inputs=minibatch)
             encodings.append(encoding.sample()), plans.append(plan.sample())
         return np.vstack(encodings), np.vstack(plans)
 
-    e_unlab, p_unlab = compute_batch(unlabelled_batch, trainer, args)
-    e_lab, p_lab = compute_batch(labelled_batch, trainer, args)
+    e_unlab, p_unlab = compute_batch(unlabelled_batch, trainer, args, batch_type='unlabelled')
+    e_lab, p_lab = compute_batch(labelled_batch, trainer, args, batch_type='labelled')
 
     enc, plan = np.vstack([e_lab, e_unlab]), np.vstack([p_lab, p_unlab])
     return enc, plan, colors, unlabelled_colors
 
-
+# TODO adjust this so that language labelled can be plotted in their positions too
 def produce_cluster_fig(unlabelled_batch, labelled_batch, trainer, args, bucket=True, for_live_plotting=False):
-    labelled_batch['goal_imgs'] = tf.tile(labelled_batch['goal_imgs'], [len(dataset['images']), 1,1,1])
+    # tile out the goal imgs here so we aren't passing as much data between devices when we use this ds for training
     z_enc, z_plan, colors, batch_colors = get_latent_vectors(unlabelled_batch, labelled_batch, trainer, args)
     z_combined = tf.concat([z_enc, z_plan], axis = 0)
     reducer.fit(z_combined)

@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp4
+export TPU_NAME=lfp1
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -142,16 +142,16 @@ IM_BIGPLAN_B0_00003 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
 
+
 --train_dataset Unity/envHz25 \
 --test_dataset Unity/envHz25_test \
-
 --train_dataset Unity/serv12Hz \
 --test_dataset Unity/serv12Hz_test \
 
 python3 train_lfp.py \
-12B0_01 \
---train_dataset Unity/serv12Hz \
---test_dataset Unity/serv12Hz_test \
+150k25B0_0 \
+--train_dataset Unity/envHz25 \
+--test_dataset Unity/envHz25_test \
 -tfr \
 -s GCS \
 -d TPU \
@@ -161,11 +161,10 @@ python3 train_lfp.py \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.01 \
+-B 0.0 \
 -n 5 \
 -wmin 20 \
 -wmax 40 \
--nm \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
 
@@ -216,3 +215,10 @@ UNITY_IM_B0_01 \
 -n 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME
+
+
+
+This the language model
+"https://tfhub.dev/google/universal-sentence-encoder/4"
+
+https://stackoverflow.com/questions/60578801/how-to-load-tf-hub-model-from-local-system

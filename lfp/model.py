@@ -169,6 +169,25 @@ def create_planner(obs_dim, goal_dim,
     mixture = tfpl.DistributionLambda(latent_normal, name='latent_variable')((mu, scale))
     return Model([o_i, o_g], mixture)
 
+# maps from sentence embedding space to goal dim space
+def create_goal_space_mapper(input_embedding_dim, goal_embedding_dim,
+                   layer_size=2048, **kwargs):
+    # params #
+    batch_size = None
+
+    # Input #
+    input_embeddings = Input(shape=(input_embedding_dim,), batch_size=batch_size, dtype=tf.float32,
+                name='lang_embeds')  # embeddings created by MUSE or equiv
+
+    # Layers #
+    x = Masking(mask_value=0.)(input_embeddings)
+    x = Dense(layer_size, activation="relu", name='layer_1')(x)
+    x = Dense(layer_size, activation="relu", name='layer_2')(x)
+
+    goal_embeddings = Dense(goal_embedding_dim, activation=None, name='goal_space')(x)
+
+    return Model(input_embeddings, goal_embeddings)
+
 # InfoVAE related
 def compute_kernel(x, y):
     x_size = tf.shape(x)[0]
@@ -186,33 +205,33 @@ def compute_mmd(x, y):
 
 
 
-# Standard CNN boi
-def create_vision_network(img_height, img_width, embedding_size = 256):
+# # Standard CNN boi
+# def create_vision_network(img_height, img_width, embedding_size = 256):
 
-  return Sequential([
-  Rescaling(1./255, input_shape=(img_height, img_width, 3)), # put it here for portability
-  Conv2D(32, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(32, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(64, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(64, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(128, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(128, 3, padding='same', activation='relu'),
-  MaxPooling2D(),
-  Conv2D(64, 3, padding='same', activation='relu', name='features'),
-  Flatten(),
-  Dense(512, activation='relu'),
-  Dense(embedding_size),  
-], name = 'feature_encoder')
+#   return Sequential([
+#   Rescaling(1./255, input_shape=(img_height, img_width, 3)), # put it here for portability
+#   Conv2D(32, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(32, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(64, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(64, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(128, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(128, 3, padding='same', activation='relu'),
+#   MaxPooling2D(),
+#   Conv2D(64, 3, padding='same', activation='relu', name='features'),
+#   Flatten(),
+#   Dense(512, activation='relu'),
+#   Dense(embedding_size),  
+# ], name = 'feature_encoder')
 
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
-    def __init__(self,  img_height=200, img_width = 200, img_channels=3, embedding_size=64):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64):
         super(cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width

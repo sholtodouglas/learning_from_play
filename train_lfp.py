@@ -28,9 +28,12 @@ parser.add_argument('-wmin', '--window_size_min', default=20, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
 parser.add_argument('-lp', '--planner_layer_size', default=2048, type=int, help='Layer size of planner, increases size of neural net')
+parser.add_argument('-lg', '--goal_mapper_layer_size', default=512, type=int, help='Layer size of goal mapping networks from im and sent to goal space, increases size of neural net')
 parser.add_argument('-embd', '--img_embedding_size', default=64, type=int, help='Embedding size of features,goal space')
+parser.add_argument('-s_embd', '--sentence_embedding_size', default=512, type=int, help='Embedding size of MUSE sentence embeddings')
 parser.add_argument('-g_embd', '--gripper_img_embedding_size', default=32, type=int, help='Embedding size of features,goal space')
 parser.add_argument('-z', '--latent_dim', default=256, type=int, help='Size of the VAE latent space')
+parser.add_argument('-zg', '--goal_space_dim', default=32, type=int, help='Size of the goal embedding space')
 parser.add_argument('-g', '--gcbc', default=False, action='store_true', help='Enables GCBC, a simpler model with no encoder/planner')
 parser.add_argument('-n', '--num_distribs', default=None, type=int, help='Number of distributions to use in logistic mixture model')
 parser.add_argument('-q', '--qbits', default=None, type=int, help='Number of quantisation bits to discrete distributions into. Total quantisations = 2**qbits')
@@ -43,6 +46,9 @@ parser.add_argument('-gi', '--gripper_images', default=False, action='store_true
 parser.add_argument('-sim', '--sim', default='Unity', help='Unity/Pybullet')
 parser.add_argument('-vq', '--discrete', default=False, action='store_true')
 parser.add_argument('-nm', '--normalize', default=False, action='store_true')
+parser.add_argument('-lang', '--use_language', default=False, action='store_true')
+parser.add_argument('-cont', '--use_contrastive', default=False, action='store_true')
+parser.add_argument('-sub', '--sub_out_language_percent',  type=float, default=0.25)
 parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
@@ -177,57 +183,26 @@ valid_dataset = dl.load(valid_data)
 
 from lfp.train import LFPTrainer
 
-def train_setup():
-    # TODO: Account for gripper dims
-    model_params = {'obs_dim':args.img_embedding_size + dl.proprioceptive_features_dim if args.images else dl.obs_dim,
-                'goal_dim':args.img_embedding_size if args.images else dl.goal_dim,
-                'act_dim':dl.act_dim,
-                'layer_size':args.actor_layer_size, 
-                'latent_dim':args.latent_dim}
-
-    if args.gripper_images: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
-        model_params['obs_dim'] += args.gripper_img_embedding_size 
-
-    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
-
-    if args.gcbc:
-        encoder = None
-        planner = None
-    else:
-        model_params['layer_size'] = args.encoder_layer_size
-        if args.discrete:
-          encoder = lfp.model.create_discrete_encoder(**model_params)
-        else:
-          encoder = lfp.model.create_encoder(**model_params)
-        model_params['layer_size'] = args.planner_layer_size
-        planner = lfp.model.create_planner(**model_params)
-
-    if args.images:
-      cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
-      lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
-      if args.gripper_images:
-        gripper_cnn = lfp.model.cnn(dl.gripper_img_size, dl.gripper_img_size, embedding_size=args.gripper_img_embedding_size)
-        lfp.utils.build_cnn(gripper_cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
-    else:
-      cnn, gripper_cnn = None, None
-
-    #optimizer = tfa.optimizers.LAMB(learning_rate=args.learning_rate)
-    optimizer = optimizer = tf.optimizers.Adam
-    trainer = LFPTrainer(args, actor, dl, encoder, planner, cnn, gripper_cnn, optimizer, strategy, GLOBAL_BATCH_SIZE)
-    return actor, encoder, planner, cnn, gripper_cnn, trainer
 
 if args.device=='CPU' or args.device=='GPU':
-     actor, encoder, planner, cnn, gripper_cnn, trainer = train_setup()
+     actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer =lfp.train.train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy=None)
 else:
     with strategy.scope():
-         actor, encoder, planner, cnn, gripper_cnn, trainer = train_setup()
+         actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer = lfp.train.train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy=None)
         
         
 train_dist_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
 valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
-plotting_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
 
+plotting_background_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
+# For use with lang and plotting the colored dots
+labelled_dl = lfp.data.labelled_dl(batch_size=64)
+labelled_test_ds = iter(labelled_dl.load(labelled_dl.extract(TEST_DATA_PATHS)))
 
+if args.use_language:
+    lang_dl = lfp.data.labelled_dl(batch_size=GLOBAL_BATCH_SIZE, shuffle_size = 64) # this is probably fine as it is preshuffled during creation
+    train_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TRAIN_DATA_PATHS))))
+    valid_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TEST_DATA_PATHS))))
 
 
 from tensorflow.keras.utils import Progbar
@@ -262,21 +237,21 @@ else:
   wandb.run.name = run_name
   t = 0
 
-
-from lfp.plotting import produce_cluster_fig, project_enc_and_plan, plot_to_image
 from lfp.metric import log # gets state and clears simultaneously
 
 # Autograph just
 # Creating these autograph wrappers so that tf.data operations are executed in graph mode
 #@tf.function
-def train(train_dataset, beta):
-    train_batch = next(train_dataset)
-    trainer.distributed_train_step(train_batch, beta)
+def train(dataset, beta):
+    train_batch = next(dataset)
+    train_lang_batch = next(train_dist_lang_dataset) if args.use_language else None
+    trainer.distributed_train_step(train_batch, train_lang_batch, beta)
 
 #@tf.function
-def test(valid_dataset, beta):
-    valid_batch = next(valid_dataset)
-    trainer.distributed_test_step(valid_batch, beta)
+def test(dataset, beta):
+    valid_batch = next(dataset)
+    valid_lang_batch = next(valid_dist_lang_dataset) if args.use_language else None
+    trainer.distributed_test_step(valid_batch, valid_lang_batch, beta)
 
 while t < args.train_steps:
     start_time = time.time()
@@ -300,6 +275,14 @@ while t < args.train_steps:
 
     if (t+1) % save_inc == 0:
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
+
+        # How we plot the cluster figs
+        batches = [trainer.make_sequences_variable_length(plotting_background_dataset.next()) for i in range(0,4)]
+        super_batch = {}
+        for k in batches[0].keys():
+            super_batch[k] = np.concatenate([b[k] for b in batches])
+        lang_batch = labelled_test_ds.next()
+        fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
         #if not args.gcbc and not args.images:
         #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
@@ -307,8 +290,8 @@ while t < args.train_steps:
         #   experiment.log_figure('z_enc', z_enc, step=t)
         #   experiment.log_figure('z_plan', z_plan,step=t)
 
-        #   # WandB
-        #   wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
+        # WandB
+        wandb.log({'z_enc':z_enc, 'z_plan':z_plan}, step=t)
 
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)

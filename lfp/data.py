@@ -15,7 +15,7 @@ from tensorflow.python.lib.io import file_io
 dimensions = {'Unity': {'obs': 19,
                         'acts': 7,
                         'achieved_goals': 12,
-                        'shoulder_img_hw':256,
+                        'shoulder_img_hw':128,
                         'hz': 15},
               'Pybullet': {'obs': 18,
                         'acts': 7,
@@ -171,7 +171,7 @@ class PlayDataloader():
             record_paths = []
             for p in paths:
                 records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-                record_paths += [pth for pth in records if 'tags' not in pth and 'labels' not in pth]
+                record_paths += [pth for pth in records if 'label' not in pth]
             dataset = extract_tfrecords(record_paths, self.include_imgs, self.include_gripper_imgs, self.sim, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
@@ -262,7 +262,60 @@ class PlayDataloader():
 #########################################################################################################################################################################################################
 ################################################################### For reading datasets which are made of full trajectories (e.g the sentence labelled trajectories) ###################################
 #########################################################################################################################################################################################################
+from tensorflow.train import BytesList, FloatList, Int64List
+from tensorflow.train import Example, Features, Feature
 
+
+def serialise_traj(data):
+    
+    obs, acts, goals, seq_lens, masks, imgs , gripper_imgs, goal_imgs, proprioceptive_features, label, label_embedding, tag  = data['obs'], \
+    data['acts'], data['goals'], data['seq_lens'], data['masks'], data['imgs'], data['gripper_imgs'], data['goal_imgs'], data['proprioceptive_features'], data['label'], data['label_embedding'], data['tag']
+    
+    # obs (1, 40, 19)
+    # acts (1, 40, 7)
+    # goals (1, 40, 11)
+    # seq_lens (1,)
+    # masks (1, 40)
+    # imgs (1, 1, 128, 128, 3)
+    # gripperimgs (1, 40, 64, 64, 3)
+    # goal_imgs (1, 1, 128, 128, 3)
+    # proprioceptive_features (1, 40, 7)
+    # label string
+    # label embedding [1,512]
+    # tag string
+
+    
+    obs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(obs).numpy(),]))
+    acts = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(acts).numpy(),]))
+    goals = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goals).numpy(),]))
+    seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
+    masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
+
+    imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
+    gripper_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(gripper_imgs).numpy(),]))
+    goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
+    proprioceptive_features = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(proprioceptive_features).numpy(),]))
+    label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
+    label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
+    tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
+    
+    features = Features(feature={
+              'obs':obs,
+              'acts':acts,
+              'goals':goals,
+              'seq_lens':seq_lens,
+              'masks':masks,
+              'imgs':imgs,
+              'gripper_imgs':gripper_imgs,
+              'goal_imgs':goal_imgs,
+              'proprioceptive_features':proprioceptive_features,
+              'label': label,
+              'label_embedding': label_embedding,
+              'tag': tag})
+    
+    example = Example(features=features)
+    
+    return example.SerializeToString()
 
 def read_traj_tfrecord(example):
     LABELED_TFREC_FORMAT = {
@@ -276,6 +329,8 @@ def read_traj_tfrecord(example):
             'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'label':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'label_embedding':tf.io.FixedLenFeature([], tf.string),
+            'tag': tf.io.FixedLenFeature([], tf.string),
     }
     data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
     
@@ -289,6 +344,8 @@ def read_traj_tfrecord(example):
     goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)   
     proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
     label = tf.io.parse_tensor(data['label'], tf.string)
+    label_embedding = tf.io.parse_tensor(data['label_embedding'], tf.float32)
+    tag = tf.io.parse_tensor(data['tag'], tf.string)
     
 
 
@@ -304,7 +361,9 @@ def read_traj_tfrecord(example):
               'gripper_imgs':gripper_imgs,
               'goal_imgs':goal_imgs,
               'proprioceptive_features':proprioceptive_features,
-              'label': label}
+              'labels': label,
+              'label_embeddings':label_embedding,
+              'tags': tag}
 
 
 def load_traj_tf_records(filenames, ordered=False):
@@ -323,44 +382,46 @@ def load_traj_tf_records(filenames, ordered=False):
 
 
 class labelled_dl():
-        def __init__(self, 
-            filenames,
-            label_type='tags',  # 'tags' for numbered types or 'labels'
-            window_size=40,
+        def __init__(self,
+            label_type='label',  # 'tags' for numbered types or 'labels'
             num_workers=4,
             batch_size=64,
             shuffle_size=32,
             normalize=False):
-        
-            self.filenames = filenames
-            self.window_size = window_size
+
             self.num_workers = num_workers
             self.batch_size = batch_size
             self.shuffle_size = shuffle_size
             self.normalize = normalize
+            self.label_type = label_type
 
             if self.normalize:
-                src = str(filenames[0])+'/normalisation.npz'
-                f = BytesIO(file_io.read_file_to_string(src, binary_mode=True))
-                self.normalising_constants = np.load(f)
+                raise NotImplementedError
+                # src = str(filenames[0])+'/normalisation.npz'
+                # f = BytesIO(file_io.read_file_to_string(src, binary_mode=True))
+                # self.normalising_constants = np.load(f)
 
             self.prefetch_size = tf.data.experimental.AUTOTUNE
 
+            
+        def extract(self, filenames):
             labelled_paths = []
             for p in filenames:
                 records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
-                labelled_paths += [pth for pth in records if label_type  in pth]
+                labelled_paths += [pth for pth in records if self.label_type  in pth]
 
-            self.dataset = load_traj_tf_records(labelled_paths)
+            return load_traj_tf_records(labelled_paths)
 
-            self.dataset = (self.dataset
+        def load(self, dataset):
+            dataset = (dataset
                         .map(self.transform, num_parallel_calls=self.num_workers)
                         .repeat()
                         .shuffle(self.shuffle_size)
                         .batch(self.batch_size, drop_remainder=True)
                         .prefetch(self.prefetch_size))
-            
-        
+            return dataset
+
+
         
         def transform(self, dataset):
                 # tile out the goal img
