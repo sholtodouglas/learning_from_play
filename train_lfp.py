@@ -203,6 +203,8 @@ if args.use_language:
     lang_dl = lfp.data.labelled_dl(batch_size=GLOBAL_BATCH_SIZE, shuffle_size = 64) # this is probably fine as it is preshuffled during creation
     train_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TRAIN_DATA_PATHS))))
     valid_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TEST_DATA_PATHS))))
+else:
+    train_dist_lang_dataset, valid_dist_lang_dataset = None, None
 
 
 from tensorflow.keras.utils import Progbar
@@ -242,23 +244,19 @@ from lfp.metric import log # gets state and clears simultaneously
 # Autograph just
 # Creating these autograph wrappers so that tf.data operations are executed in graph mode
 #@tf.function
-def train(dataset, beta):
-    train_batch = next(dataset)
-    train_lang_batch = next(train_dist_lang_dataset) if args.use_language else None
-    trainer.distributed_train_step(train_batch, train_lang_batch, beta)
+def step(dataset, beta, f, lang_dataset=None):
+    batch = next(dataset)
+    lang_batch = next(lang_dataset) if args.use_language else None
+    f(batch, beta, lang_batch)
 
 #@tf.function
-def test(dataset, beta):
-    valid_batch = next(dataset)
-    valid_lang_batch = next(valid_dist_lang_dataset) if args.use_language else None
-    trainer.distributed_test_step(valid_batch, valid_lang_batch, beta)
 
 while t < args.train_steps:
     start_time = time.time()
-    train(train_dist_dataset, args.beta)
+    step(train_dist_dataset, args.beta, trainer.distributed_train_step, train_dist_lang_dataset)
 
     if t % valid_inc == 0:
-        test(valid_dist_dataset, args.beta)
+        step(valid_dist_dataset, args.beta, trainer.distributed_test_step, valid_dist_lang_dataset)
         step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}

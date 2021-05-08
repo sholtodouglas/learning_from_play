@@ -159,8 +159,6 @@ class LFPTrainer():
         else:
             per_example_loss = self.mae_action_loss(labels, predictions) * mask
 
-        print(self.nll_action_loss(labels, predictions).shape)
-
         per_example_loss = tf.reduce_sum(per_example_loss, axis=1) / seq_lens  # take mean along the timestep
         return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.global_batch_size)
 
