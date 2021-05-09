@@ -271,7 +271,7 @@ while t < args.train_steps:
         # Plot on WandB
         wandb.log(metrics, step=t)
 
-    if (t+1) % save_inc == 0: # zero while we test this
+    if (t+0) % save_inc == 0: # zero while we test this
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
 
         if not args.images:
