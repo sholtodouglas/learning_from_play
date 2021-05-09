@@ -290,7 +290,7 @@ while t < args.train_steps:
             #   experiment.log_figure('z_plan', z_plan,step=t)
 
             # WandB
-            wandb.log({'z_enc':lfp.plotting.plot_to_image(fig_enc), 'z_plan':lfp.plotting.plot_to_image(fig_plan)}, step=t)
+            wandb.log({'z_enc':fig_enc, 'z_plan':fig_plan}, step=t)
 
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)

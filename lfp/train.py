@@ -498,121 +498,40 @@ class LFPTrainer():
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
+    def get_saved_objects(self):
+        saved_objects = {'actor': self.actor,
+            'encoder': self.encoder,
+            'planner': self.planner,
+            'actor_optimizer': self.actor_optimizer,
+            'encoder_optimizer': self.encoder_optimizer,
+            'planner_optimizer': self.planner_optimizer}
+        if self.args.images: saved_objects['cnn'] = self.cnn, saved_objects['cnn_optimizer'] = self.cnn_optimizer, saved_objects['img_goal_embed'] = self.img_embed_to_goal_space, saved_objects['img_goal_embed_optimizer'] = self.lang_embed_to_goal_space_optimizer
+        if self.args.gripper_images: saved_objects['gripper_cnn'] = self.gripper_cnn, saved_objects['griper_cnn_optimizer'] = self.gripper_cnn_optimizer
+        if self.args.language: saved_objects['lang_goal_embed'] = self.lang_embed_to_goal_space, saved_objects['lang_goal_embed_optimizer'] = self.lang_embed_to_goal_space_optimizer
+        return saved_objects
+
+
     def save_weights(self, path, run_id=None, experiment_key=None):
 
         if self.args.data_source == 'GCS':
             if self.chkpt_manager is None:
-                saved_objects = {'actor': self.actor,
-                                 'encoder': self.encoder,
-                                 'planner': self.planner,
-                                 'actor_optimizer': self.actor_optimizer,
-                                 'encoder_optimizer': self.encoder_optimizer,
-                                 'planner_optimizer': self.planner_optimizer}
-                if self.args.images and self.args.gripper_images:
-                    ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn, gripper_cnn=self.gripper_cnn)
-                if self.args.images:
-                    ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn)
-                else:
-                    ckpt = tf.train.Checkpoint(**saved_objects)
+                ckpt = tf.train.Checkpoint(**get_saved_objects())
                 self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
                 save_path = self.chkpt_manager.save()
             else:
                 save_path = self.chkpt_manager.save()
         else: # We have to save it all to drive
-            os.makedirs(path, exist_ok=True)
-
-            # Save the config as json
-            print('Saving training config...')
-            with open(f'{path}/config.json', 'w') as f:
-                d = vars(self.args)
-                d['run_id'] = run_id
-                d['experiment_key'] = experiment_key
-                d['relative_act'] = self.dl.relative_act
-                d['joints'] = self.dl.joints
-                d['quaternion_act'] = self.dl.quaternion_act
-                json.dump(d, f)
-
-            self.actor.save_weights(f'{path}/actor.h5')
-            if not self.args.gcbc:
-                self.encoder.save_weights(f'{path}/encoder.h5')
-                self.planner.save_weights(f'{path}/planner.h5')
-            if self.args.images:
-                self.cnn.save_weights(f'{path}/cnn.h5')
-
-            os.makedirs(path+'/optimizers', exist_ok=True)
-            np.save(f'{path}/optimizers/actor_optimizer.npy', self.actor_optimizer.get_weights(), allow_pickle=True)
-            np.save(f'{path}/optimizers/encoder_optimizer.npy', self.encoder_optimizer.get_weights(), allow_pickle=True)
-            np.save(f'{path}/optimizers/planner_optimizer.npy', self.planner_optimizer.get_weights(), allow_pickle=True)
+            raise NotImplementedError
 
 
     def load_weights(self, path, with_optimizer=False, from_checkpoint=False):
         # With checkpoint
         if from_checkpoint or self.data_source == 'GCS':
-            saved_objects = {'actor': self.actor,
-                             'encoder': self.encoder,
-                             'planner': self.planner,
-                             'actor_optimizer': self.actor_optimizer,
-                             'encoder_optimizer': self.encoder_optimizer,
-                             'planner_optimizer': self.planner_optimizer}
-            if self.args.images and self.args.gripper_images:
-                ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn, gripper_cnn=self.gripper_cnn)
-            if self.args.images:
-                ckpt = tf.train.Checkpoint(**saved_objects, cnn=self.cnn)
-            else:
-                ckpt = tf.train.Checkpoint(**saved_objects)
+            ckpt = tf.train.Checkpoint(**get_saved_objects())
             self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
             ckpt.restore(tf.train.latest_checkpoint(path))
         else:
-        # Without checkpointing, because it was created on GDRIVE
-            self.actor.load_weights(f'{path}/actor.h5')
-            if not self.args.gcbc:
-                self.encoder.load_weights(f'{path}/encoder.h5')
-                self.planner.load_weights(f'{path}/planner.h5')
-            if self.args.images: self.cnn.load_weights(f'{path}/cnn.h5')
-            if self.args.gripper_images: self.gripper_cnn.load_weights(f'{path}/gripper_cnn.h5')
-
-            if with_optimizer:
-                self.load_optimizer_state(self.actor_optimizer, f'{path}/optimizers/actor_optimizer.npy', self.actor.trainable_variables)
-                if not self.args.gcbc:
-                    self.load_optimizer_state(self.encoder_optimizer, f'{path}/optimizers/encoder_optimizer.npy', self.encoder.trainable_variables)
-                    self.load_optimizer_state(self.planner_optimizer, f'{path}/optimizers/planner_optimizer.npy', self.planner.trainable_variables)
-                if self.args.images: self.load_optimizer_state(self.cnn_optimizer, f'{path}/optimizers/cnn_optimizer.npy', self.cnn.trainable_variables)
-                if self.args.gripper_images: self.load_optimizer_state(self.gripper_cnn_optimizer, f'{path}/optimizers/gripper_cnn_optimizer.npy', self.gripper_cnn.trainable_variables)
-
-
-    def load_optimizer_state(self, optimizer, load_path, trainable_variables):
-        def optimizer_step():
-            # need to do this to initialize the optimiser
-            # dummy zero gradients
-            zero_grads = [tf.zeros_like(w) for w in trainable_variables]
-            # save current state of variables
-            saved_vars = [tf.identity(w) for w in trainable_variables]
-
-            # Apply gradients which don't do anything
-            optimizer.apply_gradients(zip(zero_grads, trainable_variables))
-
-            # Reload variables
-            [x.assign(y) for x, y in zip(trainable_variables, saved_vars)]
-            return 0.0
-
-        @tf.function
-        def distributed_opt_step():
-            '''
-            Only used for optimizer checkpointing - we need to run a pass to initialise all the optimizer weights. Can't use restore as colab TPUs don't have a local filesystem.
-            '''
-            per_replica_losses = self.strategy.run(optimizer_step, args=())
-            return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
-
-        # Load optimizer weights
-        opt_weights = np.load(load_path, allow_pickle=True)
-
-        # init the optimiser
-        distributed_opt_step()
-        # Set the weights of the optimizer
-        optimizer.set_weights(opt_weights)
-
-
-
+            raise NotImplementedError # As only using GCS, removed DRIVE support.
 
 def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
     
