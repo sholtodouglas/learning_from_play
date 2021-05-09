@@ -507,7 +507,7 @@ class LFPTrainer():
             'planner_optimizer': self.planner_optimizer}
         if self.args.images: saved_objects['cnn'], saved_objects['cnn_optimizer'], saved_objects['img_goal_embed'], saved_objects['img_goal_embed_optimizer']  = self.cnn,  self.cnn_optimizer, self.img_embed_to_goal_space, self.lang_embed_to_goal_space_optimizer
         if self.args.gripper_images: saved_objects['gripper_cnn'], saved_objects['griper_cnn_optimizer'] = self.gripper_cnn, self.gripper_cnn_optimizer
-        if self.args.language: saved_objects['lang_goal_embed'], saved_objects['lang_goal_embed_optimizer'] = self.lang_embed_to_goal_space, self.lang_embed_to_goal_space_optimizer
+        if self.args.use_language: saved_objects['lang_goal_embed'], saved_objects['lang_goal_embed_optimizer'] = self.lang_embed_to_goal_space, self.lang_embed_to_goal_space_optimizer
         return saved_objects
 
 
