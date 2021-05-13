@@ -18,6 +18,8 @@ parser = argparse.ArgumentParser(description='LFP training arguments')
 parser.add_argument('run_name')
 parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
 parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
+parser.add_argument('--bulk_datasets', nargs='+', help='data diversity dataset names')
+parser.add_argument('--video_datasets', nargs='+', help='for contrastive learning')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
 parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
@@ -52,6 +54,11 @@ parser.add_argument('-sub', '--sub_out_language_percent',  type=float, default=0
 parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
+# Set these to split the dataset up so we control the proportion of lang vs bulk vs video etc
+parser.add_argument('-ss', '--standard_split', type=int, default=0)
+parser.add_argument('-bs', '--bulk_split', type=int, default=0)
+parser.add_argument('-ls', '--lang_split', type=int, default=0)
+parser.add_argument('-vs', '--video_split', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -133,8 +140,8 @@ else:
 print(f'Storage path: {STORAGE_PATH}')
 TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
 TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
-
-
+BULK_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.bulk_datasets]
+VIDEO_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.video_datasets]
 # # Data Creation
 
 print("Tensorflow version " + tf.__version__)
@@ -165,16 +172,6 @@ else:
 
 # # Dataset
 
-GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
-dl = lfp.data.PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim, batch_size=GLOBAL_BATCH_SIZE,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-
-# Train data
-train_data = dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords)
-train_dataset = dl.load(train_data)
-
-# Validation data
-valid_data = dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords)
-valid_dataset = dl.load(valid_data)
 
 
 # # Model
@@ -191,21 +188,7 @@ else:
          actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer = lfp.train.train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy=strategy)
         
         
-train_dist_dataset = iter(strategy.experimental_distribute_dataset(train_dataset))
-valid_dist_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
-
-plotting_background_dataset = iter(valid_dataset) #for the cluster fig, easier with a non distributed dataset
-# For use with lang and plotting the colored dots
-labelled_dl = lfp.data.labelled_dl(batch_size=64)
-labelled_test_ds = iter(labelled_dl.load(labelled_dl.extract(TEST_DATA_PATHS)))
-
-if args.use_language:
-    lang_dl = lfp.data.labelled_dl(batch_size=GLOBAL_BATCH_SIZE, shuffle_size = 64) # this is probably fine as it is preshuffled during creation
-    train_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TRAIN_DATA_PATHS))))
-    valid_dist_lang_dataset = iter(strategy.experimental_distribute_dataset(lang_dl.load(lang_dl.extract(TEST_DATA_PATHS))))
-else:
-    train_dist_lang_dataset, valid_dist_lang_dataset = None, None
-
+dataset_coordinator = lfp.data.distributed_data_coordinator(args, TRAIN_DATA_PATHS, TEST_DATA_PATHS, strategy, BULK_DATA_PATHS, VIDEO_DATA_PATHS, args.standard_split, args.bulk_split , args.lang_split, args.video_split, NUM_DEVICES) # non-teleop, video only data
 
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
@@ -253,10 +236,13 @@ def step(dataset, beta, f, lang_dataset=None):
 
 while t < args.train_steps:
     start_time = time.time()
-    step(train_dist_dataset, args.beta, trainer.distributed_train_step, train_dist_lang_dataset)
+    batch, lang, video, bulk = dataset_coordinator.next()
+    trainer.distributed_train_step(batch, args.beta, lang, video, bulk)
 
     if t % valid_inc == 0:
-        step(valid_dist_dataset, args.beta, trainer.distributed_test_step, valid_dist_lang_dataset)
+        batch, lang, video = dataset_coordinator.next_valid()
+        trainer.distributed_test_step(batch, args.beta, lang, video)
+
         step_time = round(time.time() - start_time, 1)
 
         metrics = {metric_name: log(metric) for metric_name, metric in trainer.metrics.items()}
@@ -276,11 +262,11 @@ while t < args.train_steps:
 
         if not args.images:
             # How we plot the cluster figs
-            batches = [trainer.make_sequences_variable_length(plotting_background_dataset.next()) for i in range(0,2)]
+            batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,2)]
             super_batch = {}
             for k in batches[0].keys():
                 super_batch[k] = np.concatenate([b[k] for b in batches])
-            lang_batch = labelled_test_ds.next()
+            lang_batch = dataset_coordinator.labelled_test_ds.next()
             fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
             #if not args.gcbc and not args.images:
             #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)

@@ -11,12 +11,15 @@ pp = pprint.PrettyPrinter(indent=4)
 
 from io import BytesIO
 from tensorflow.python.lib.io import file_io
+import lfp.unity_utils as uu
 
 dimensions = {'Unity': {'obs': 19,
+                        'obs_extra_info': uu.messaging.UNITY_MAX_OBS_SIZE,
                         'acts': 7,
-                        'achieved_goals': 12,
+                        'achieved_goals': 12, 
+                        'achieved_goals_extra_info':uu.messaging.UNITY_MAX_AG_SIZE,
                         'shoulder_img_hw':128,
-                        'hz': 15},
+                        'hz': 25},
               'Pybullet': {'obs': 18,
                         'acts': 7,
                         'achieved_goals': 11,
@@ -52,9 +55,14 @@ def read_tfrecord(include_imgs=False, include_gripper_imgs=False, sim='Unity'):
         data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
 
         output = {}
-        output['obs'] = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (dimensions[sim]['obs'],))
+        if include_imgs:
+            output['obs'] = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (dimensions[sim]['obs_extra_info'],))
+            output['achieved_goals'] = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (dimensions[sim]['achieved_goals_extra_info'],))
+        else:
+            output['obs'] = tf.ensure_shape(tf.io.parse_tensor(data['obs'], tf.float32), (dimensions[sim]['obs'],))
+            output['achieved_goals'] = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (dimensions[sim]['achieved_goals'],))
+
         output['acts'] = tf.ensure_shape(tf.io.parse_tensor(data['acts'], tf.float32), (dimensions[sim]['acts'],))
-        output['achieved_goals'] = tf.ensure_shape(tf.io.parse_tensor(data['achieved_goals'], tf.float32), (dimensions[sim]['achieved_goals'],))
         output['sequence_index'] = tf.cast(data['sequence_index'], tf.int32)
         output['sequence_id'] = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
         if include_imgs:
@@ -148,7 +156,8 @@ class PlayDataloader():
         self.seed = seed
         self.mean_obs, self.std_obs, self.mean_acts, self.standard_acts = None, None, None,None
         self.sim=sim
-        # Todo redo the standardisation find original version here https://github.com/sholtodouglas/learning_from_play/blob/9f385c0c80f905da63b9954e192dac696559e163/languageXplay.ipynb
+        if self.sim == 'Unity' and not self.include_imgs:
+            print('Confirm that data dimensions are correct - states will be cut down to exclude additional objects introduced for the image dataset - states has only been test on blue block.')
 
     @staticmethod
     def print_minutes(dataset, sim):
@@ -197,6 +206,10 @@ class PlayDataloader():
 
         ags = dataset['achieved_goals']
 
+        if not self.include_imgs: # If its from states, apply the max state dim to cut out excess info we might have room for many objects from states
+            obs = obs[:dimensions[self.sim]['obs']]
+            ags = ags[:dimensions[self.sim]['achieved_goals']]
+
         if self.normalize:
             obs = obs - self.normalising_constants['obs_mean']
             acts = acts - self.normalising_constants['acts_mean']
@@ -225,12 +238,15 @@ class PlayDataloader():
     # - single-threaded tfrecords mapper (NOT the IO)
     # - action validation also taxing, it could be risky removing but it's also too slow. We should validate our
     #   data once off beforehand. Todo: write a data validator
-    def load(self, dataset):
+    def load(self, dataset, batch_size=None):
         """
 
         :param dataset: a tf Dataset
         :return:
         """
+        if batch_size == None:
+            batch_size = self.batch_size
+
         window_lambda = lambda x: tf.data.Dataset.zip(x).batch(self.window_size)
         seq_overlap_filter = lambda x: tf.equal(tf.size(tf.unique(tf.squeeze(x['dataset_path'])).y), 1)
         dataset = (dataset
@@ -240,7 +256,7 @@ class PlayDataloader():
                     .filter(seq_overlap_filter) # Todo: optimise this/remove if possible
                     .repeat()
                     .shuffle(self.shuffle_size)
-                    .batch(self.batch_size, drop_remainder=True)
+                    .batch(batch_size, drop_remainder=True)
                     .prefetch(self.prefetch_size))
 
         self.obs_dim = dataset.element_spec['obs'].shape[-1]
@@ -384,12 +400,16 @@ def load_traj_tf_records(filenames, ordered=False):
 class labelled_dl():
         def __init__(self,
             label_type='label',  # 'tags' for numbered types or 'labels'
+            include_images=True,
+            sim = 'Unity',
             num_workers=4,
             batch_size=64,
-            shuffle_size=32,
+            shuffle_size=64,
             normalize=False):
 
             self.num_workers = num_workers
+            self.include_images = include_images
+            self.sim = 'Unity'
             self.batch_size = batch_size
             self.shuffle_size = shuffle_size
             self.normalize = normalize
@@ -412,12 +432,15 @@ class labelled_dl():
 
             return load_traj_tf_records(labelled_paths)
 
-        def load(self, dataset):
+        def load(self, dataset, batch_size=None):
+            if batch_size == None:
+                batch_size = self.batch_size
+
             dataset = (dataset
                         .map(self.transform, num_parallel_calls=self.num_workers)
                         .repeat()
                         .shuffle(self.shuffle_size)
-                        .batch(self.batch_size, drop_remainder=True)
+                        .batch(batch_size, drop_remainder=True)
                         .prefetch(self.prefetch_size))
             return dataset
 
@@ -426,9 +449,83 @@ class labelled_dl():
         def transform(self, dataset):
                 # tile out the goal img
 
-            if self.normalize:
-                dataset['obs'] = dataset['obs'] - self.normalising_constants['obs_mean']
-                dataset['acts'] = dataset['acts'] - self.normalising_constants['acts_mean']
-                dataset['goals'] = dataset['goals'] - self.normalising_constants['ag_mean']
+            if not self.include_images: # If its from states, apply the max state dim to cut out excess info we might have room for many objects from states
+                obs = dataset['obs'][:dimensions[self.sim]['obs']]
+                ags = dataset['goals'][:dimensions[self.sim]['achieved_goals']]
 
             return dataset
+
+
+
+
+# create dataloader which combines the  datasets, and outputs next - makes them distributed if necessary. 
+# This is so we can use TFrecord speed, but get the right proportions of various datasets (e.g a bulk pretraining one for extra data diversity)
+class distributed_data_coordinator:
+    # load
+
+    def __init__(self,
+        args,
+        TRAIN_DATA_PATHS, # all data we have - these are lists of folder paths,
+        TEST_DATA_PATHS,
+        strategy,
+        BULK_DATA_PATHS=[], # data we might want to emphaise in higher proportion - e.g if training for a standard viewpoint or environment
+        VIDEO_DATA_PATHS=[],
+        standard_split = 64,
+        bulk_split = 0, # lets make these the actual number cause it needs to be 8 divisible - 
+        lang_split = 0,
+        video_split = 0,
+        NUM_DEVICES = 8,
+        ): # non-teleop, video only data
+
+        self.args = args
+
+        # bulk is like backup data that we won't have much of but enough for the diversity
+        GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
+        # If we didn't set the split, assume everything in our main train/test DS
+        if standard_split == 0: 
+            standard_split = args.batch_size
+        self.bulk_split, self.standard_split, self.lang_split, self.video_split = bulk_split* NUM_DEVICES, standard_split* NUM_DEVICES, lang_split* NUM_DEVICES, video_split* NUM_DEVICES
+        print(f"Our dataset split is {self.bulk_split} bulk, {self.standard_split} split, {self.lang_split} lang, {self.video_split} video")
+        assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == GLOBAL_BATCH_SIZE
+        if args.use_language: assert self.lang_split > 0
+        
+        ########################################## Train
+        self.dl = lfp.data.PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
+        self.dl_lang =  lfp.data.labelled_dl(include_imgs = args.images, sim = args.sim) # this is probably fine as it is preshuffled during creation
+        self.standard_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
+        self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
+        
+        ########################################## Test
+        valid_dataset = dl.load(dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords, batch_size=self.bulk_split+self.standard_split))
+        self.valid_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
+        
+        ######################################### Plotting
+        self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
+        # For use with lang and plotting the colored dots
+        labelled_dl = lfp.data.labelled_dl(batch_size=64)
+        self.labelled_test_ds = iter(labelled_dl.load(labelled_dl.extract(TEST_DATA_PATHS)))
+
+        ######################################### Languagee
+        if args.use_language:
+            self.lang_dataset =  iter(strategy.experimental_distribute_dataset(dl_lang.load(dl_lang.extract(TRAIN_DATA_PATHS),  batch_size=self.lang_split)))
+            self.lang_valid_dataset =  iter(strategy.experimental_distribute_dataset(dl_lang.load(dl_lang.extract(TEST_DATA_PATHS),  batch_size=self.lang_split)))
+        else:
+            train_dist_lang_dataset, valid_dist_lang_dataset = None, None
+        
+        ######################################### Contrastive
+        if args.use_contrastive:
+            raise NotImplementedError
+        
+    def next(self):
+        batch = next(self.standard_dataset) 
+        bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else None # combine batch and standard on device
+        lang = next(self.lang_dataset) if self.args.use_language else None
+        video = next(self.video_dataset) if self.args.use_contrastive else None
+        return batch, lang, video, bulk
+
+    def next_valid(self):
+        batch = next(self.valid_dataset)
+        # no standard - just test whatever we are validiating against
+        lang = next(self.lang_valid_dataset) if self.args.use_language else None
+        video = next(self.video_valid_dataset) if self.args.use_contrastive else None
+        return batch, lang, video

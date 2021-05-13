@@ -382,7 +382,10 @@ class LFPTrainer():
             # Plot just needs the first four...? Meh it can do that itself.
 
 
-    def train_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None):
+    def train_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None, bulk=None):
+        if bulk is not None:
+            inputs = {k: tf.concat([inputs[k], bulk[k]]) for k in inputs.keys()} # combine them
+
         inputs = self.make_sequences_variable_length(inputs) 
 
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
@@ -487,8 +490,8 @@ class LFPTrainer():
 
 
     @tf.function
-    def distributed_train_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None):
-        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos))
+    def distributed_train_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None, bulk=None):
+        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos, bulk))
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
