@@ -1,8 +1,11 @@
-import rospy
-from sensor_msgs.msg import Image as ImageMsg
-from robotics_demo.msg import Observation, ToRecord, QuaternionProprioState, PositionCommand, Goal, TimerBeat,\
-     RPYProprioState, AchievedGoal, JointPositions
-from PIL import Image, ImageOps
+try:
+    import rospy
+    from sensor_msgs.msg import Image as ImageMsg
+    from robotics_demo.msg import Observation, ToRecord, QuaternionProprioState, PositionCommand, Goal, TimerBeat,\
+        RPYProprioState, AchievedGoal, JointPositions
+    from PIL import Image, ImageOps
+except:
+    print("Ros not found - no issue if just training")
 import numpy as np
 import pybullet
 import time

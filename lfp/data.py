@@ -490,8 +490,8 @@ class distributed_data_coordinator:
         if args.use_language: assert self.lang_split > 0
         
         ########################################## Train
-        self.dl = lfp.data.PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-        self.dl_lang =  lfp.data.labelled_dl(include_imgs = args.images, sim = args.sim) # this is probably fine as it is preshuffled during creation
+        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
+        self.dl_lang =  labelled_dl(include_imgs = args.images, sim = args.sim) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
         
@@ -502,7 +502,7 @@ class distributed_data_coordinator:
         ######################################### Plotting
         self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
         # For use with lang and plotting the colored dots
-        labelled_dl = lfp.data.labelled_dl(batch_size=64)
+        labelled_dl = labelled_dl(batch_size=64)
         self.labelled_test_ds = iter(labelled_dl.load(labelled_dl.extract(TEST_DATA_PATHS)))
 
         ######################################### Languagee
@@ -518,9 +518,9 @@ class distributed_data_coordinator:
         
     def next(self):
         batch = next(self.standard_dataset) 
-        bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else None # combine batch and standard on device
         lang = next(self.lang_dataset) if self.args.use_language else None
         video = next(self.video_dataset) if self.args.use_contrastive else None
+        bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else None # combine batch and standard on device
         return batch, lang, video, bulk
 
     def next_valid(self):
