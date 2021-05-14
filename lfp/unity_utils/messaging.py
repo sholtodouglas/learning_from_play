@@ -15,7 +15,7 @@ import threading
 UNITY_MAX_OBS_SIZE = 7+ 7 + 3 + 1 + 1 + 7 + 9
 UNITY_MAX_AG_SIZE = 7+3+1+1+1+7+9 # obj1, buttons, drawer, door, obj2presence, obj2, buttonxyzs
 
-def rosImg_to_numpy(img):
+def rosImg_to_numpy(img): # : ImageMsg
     image_height = img.width
     image_width = img.height
     image = Image.frombytes('RGBA', (image_width,image_height), img.data)
@@ -23,18 +23,18 @@ def rosImg_to_numpy(img):
     return np.array(image)
 
 
-def proprio_quat_to_rpy_vector(o: QuaternionProprioState):
+def proprio_quat_to_rpy_vector(o): # : QuaternionProprioState
     x,y,z,q1,q2,q3,q4,gripper = o.pos_x, o.pos_y, o.pos_z, o.q1, o.q2, o.q3, o.q4, o.gripper
     rpy = pybullet.getEulerFromQuaternion([-q2, -q1, q4, q3]) # yay for beautiful conversion between axis
     return np.array([x,y,z,rpy[0], rpy[1], rpy[2], gripper])
 
-def proprio_rpy_to_rpy_vector(o: RPYProprioState):
+def proprio_rpy_to_rpy_vector(o): # : RPYProprioState
     return np.array([o.pos_x, o.pos_y, o.pos_z, o.rot_r, o.rot_p, o.rot_y, o.gripper])
 
 def proprio_rpy_to_ROSmsg(o: np.ndarray):
     return RPYProprioState(o[0],o[1], o[2], o[3], o[4], o[5], o[6])
 
-def ag_to_vector(o: AchievedGoal):
+def ag_to_vector(o): # : AchievedGoal
     return np.array([o.obj1_pos_x, o.obj1_pos_y, o.obj1_pos_z, o.obj1_q1, o.obj1_q2, o.obj1_q3, o.obj1_q4, o.button1, o.button2, o.button3, o.drawer, o.door, 
                     o.obj2_present, o.obj2_pos_x, o.obj2_pos_y, o.obj2_pos_z, o.obj2_q1, o.obj2_q2, o.obj2_q3, o.obj2_q4, o.button1_x, o.button1_y, o.button1_z, o.button2_x,
                     o.button2_y, o.button2_z, o.button3_x, o.button3_y, o.button3_z])
