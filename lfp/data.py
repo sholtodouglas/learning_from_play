@@ -485,7 +485,7 @@ class distributed_data_coordinator:
         if standard_split == 0: 
             standard_split = args.batch_size
         self.bulk_split, self.standard_split, self.lang_split, self.video_split = bulk_split* NUM_DEVICES, standard_split* NUM_DEVICES, lang_split* NUM_DEVICES, video_split* NUM_DEVICES
-        print(f"Our dataset split is {self.bulk_split} bulk, {self.standard_split} split, {self.lang_split} lang, {self.video_split} video")
+        print(f"Our dataset split is {self.bulk_split} bulk, {self.standard_split} specific, {self.lang_split} lang, {self.video_split} video")
         assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == GLOBAL_BATCH_SIZE
         if args.use_language: assert self.lang_split > 0
         
@@ -493,7 +493,7 @@ class distributed_data_coordinator:
         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
         self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
-        self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
+        self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
         
         ########################################## Test
         valid_dataset = dl.load(dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords, batch_size=self.bulk_split+self.standard_split))
