@@ -492,8 +492,8 @@ class distributed_data_coordinator:
         ########################################## Train
         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
         self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
-        self.standard_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
-        self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
+        self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
+        self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
         
         ########################################## Test
         valid_dataset = dl.load(dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords, batch_size=self.bulk_split+self.standard_split))
@@ -507,8 +507,8 @@ class distributed_data_coordinator:
 
         ######################################### Languagee
         if args.use_language:
-            self.lang_dataset =  iter(strategy.experimental_distribute_dataset(dl_lang.load(dl_lang.extract(TRAIN_DATA_PATHS),  batch_size=self.lang_split)))
-            self.lang_valid_dataset =  iter(strategy.experimental_distribute_dataset(dl_lang.load(dl_lang.extract(TEST_DATA_PATHS),  batch_size=self.lang_split)))
+            self.lang_dataset =  iter(strategy.experimental_distribute_dataset(self.dl_lang.load(self.dl_lang.extract(TRAIN_DATA_PATHS),  batch_size=self.lang_split)))
+            self.lang_valid_dataset =  iter(strategy.experimental_distribute_dataset(self.dl_lang.load(self.dl_lang.extract(TEST_DATA_PATHS),  batch_size=self.lang_split)))
         else:
             train_dist_lang_dataset, valid_dist_lang_dataset = None, None
         
