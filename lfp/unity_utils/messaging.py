@@ -4,10 +4,11 @@ try:
     from robotics_demo.msg import Observation, ToRecord, QuaternionProprioState, PositionCommand, Goal, TimerBeat,\
         RPYProprioState, AchievedGoal, JointPositions
     from PIL import Image, ImageOps
+    import pybullet
 except:
-    print("Ros not found - no issue if just training")
+    print("Ros/Pybullet not found - no issue if just training")
 import numpy as np
-import pybullet
+
 import time
 import threading
 
