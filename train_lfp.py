@@ -172,7 +172,8 @@ else:
 
 # # Dataset
 
-
+     
+dataset_coordinator = lfp.data.distributed_data_coordinator(args, TRAIN_DATA_PATHS, TEST_DATA_PATHS, strategy, BULK_DATA_PATHS, VIDEO_DATA_PATHS, args.standard_split, args.bulk_split , args.lang_split, args.video_split, NUM_DEVICES) # non-teleop, video only data
 
 # # Model
 
@@ -182,13 +183,12 @@ from lfp.train import LFPTrainer
 
 
 if args.device=='CPU' or args.device=='GPU':
-     actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer =lfp.train.train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy=None)
+     actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer =lfp.train.train_setup(args, dataset_coordinator.dl, dataset_coordinator.GLOBAL_BATCH_SIZE, strategy=None)
 else:
     with strategy.scope():
-         actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer = lfp.train.train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy=strategy)
+         actor, encoder, planner, cnn, gripper_cnn,  img_embed_to_goal_space, lang_embed_to_goal_space, trainer = lfp.train.train_setup(args, dataset_coordinator.dl, dataset_coordinator.GLOBAL_BATCH_SIZE, strategy=strategy)
         
-        
-dataset_coordinator = lfp.data.distributed_data_coordinator(args, TRAIN_DATA_PATHS, TEST_DATA_PATHS, strategy, BULK_DATA_PATHS, VIDEO_DATA_PATHS, args.standard_split, args.bulk_split , args.lang_split, args.video_split, NUM_DEVICES) # non-teleop, video only data
+   
 
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)

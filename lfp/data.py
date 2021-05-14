@@ -502,8 +502,8 @@ class distributed_data_coordinator:
         ######################################### Plotting
         self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
         # For use with lang and plotting the colored dots
-        labelled_dl = labelled_dl(batch_size=64)
-        self.labelled_test_ds = iter(labelled_dl.load(labelled_dl.extract(TEST_DATA_PATHS)))
+        tagged_dl = labelled_dl(batch_size=64)
+        self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
 
         ######################################### Languagee
         if args.use_language:
