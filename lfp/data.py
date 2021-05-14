@@ -491,7 +491,7 @@ class distributed_data_coordinator:
         
         ########################################## Train
         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-        self.dl_lang =  labelled_dl(include_imgs = args.images, sim = args.sim) # this is probably fine as it is preshuffled during creation
+        self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(dl.load(dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)))
         
@@ -502,7 +502,7 @@ class distributed_data_coordinator:
         ######################################### Plotting
         self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
         # For use with lang and plotting the colored dots
-        tagged_dl = labelled_dl(batch_size=64)
+        tagged_dl = labelled_dl(label_type='tags', sim = args.sim)
         self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
 
         ######################################### Languagee
