@@ -54,11 +54,11 @@ parser.add_argument('-sub', '--sub_out_language_percent',  type=float, default=0
 parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
-# Set these to split the dataset up so we control the proportion of lang vs bulk vs video etc
-parser.add_argument('-ss', '--standard_split', type=float, default=0.0)
-parser.add_argument('-bs', '--bulk_split', type=float, default=0.0)
-parser.add_argument('-ls', '--lang_split', type=float, default=0.0)
-parser.add_argument('-vs', '--video_split', type=float, default=0.0)
+# Set these to split the dataset up so we control the proportion of lang vs bulk vs video etc - make them batch numbers 
+parser.add_argument('-ss', '--standard_split', type=int, default=0)
+parser.add_argument('-bs', '--bulk_split', type=int, default=0)
+parser.add_argument('-ls', '--lang_split', type=int, default=0)
+parser.add_argument('-vs', '--video_split', type=int, default=0)
 
 args = parser.parse_args()
 
