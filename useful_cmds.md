@@ -275,4 +275,4 @@ diverseIMB0_02 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
 --standard_split 24 \
---bulk_split 8 \
+--bulk_split 8
