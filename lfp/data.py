@@ -496,7 +496,7 @@ class distributed_data_coordinator:
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
         
         ########################################## Test
-        valid_dataset = self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords, batch_size=self.bulk_split+self.standard_split))
+        valid_dataset = self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split+self.standard_split)
         self.valid_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
         
         ######################################### Plotting
