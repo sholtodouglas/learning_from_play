@@ -16,10 +16,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description='LFP training arguments')
 parser.add_argument('run_name')
-parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
-parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
-parser.add_argument('--bulk_datasets', nargs='+', help='data diversity dataset names')
-parser.add_argument('--video_datasets', nargs='+', help='for contrastive learning')
+parser.add_argument('--train_dataset', nargs='+', help='Training dataset names')
+parser.add_argument('--test_dataset', nargs='+', help='Testing dataset names')
+parser.add_argument('--bulk_dataset', nargs='+', help='data diversity dataset names')
+parser.add_argument('--video_dataset', nargs='+', help='for contrastive learning')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
 parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
@@ -55,10 +55,10 @@ parser.add_argument('--fp16', default=False, action='store_true')
 parser.add_argument('--bucket_name', help='GCS bucket name to stream data from')
 parser.add_argument('--tpu_name', help='GCP TPU name') # Only used in the script on GCP
 # Set these to split the dataset up so we control the proportion of lang vs bulk vs video etc
-parser.add_argument('-ss', '--standard_split', type=int, default=0)
-parser.add_argument('-bs', '--bulk_split', type=int, default=0)
-parser.add_argument('-ls', '--lang_split', type=int, default=0)
-parser.add_argument('-vs', '--video_split', type=int, default=0)
+parser.add_argument('-ss', '--standard_split', type=float, default=0.0)
+parser.add_argument('-bs', '--bulk_split', type=float, default=0.0)
+parser.add_argument('-ls', '--lang_split', type=float, default=0.0)
+parser.add_argument('-vs', '--video_split', type=float, default=0.0)
 
 args = parser.parse_args()
 
@@ -140,8 +140,8 @@ else:
 print(f'Storage path: {STORAGE_PATH}')
 TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
 TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
-BULK_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.bulk_datasets]
-VIDEO_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.video_datasets]
+BULK_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.bulk_datasets] if args.bulk_datasets != None else []
+VIDEO_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.video_datasets] if args.video_datasets != None else []
 # # Data Creation
 
 print("Tensorflow version " + tf.__version__)
@@ -226,13 +226,6 @@ from lfp.metric import log # gets state and clears simultaneously
 
 # Autograph just
 # Creating these autograph wrappers so that tf.data operations are executed in graph mode
-#@tf.function
-def step(dataset, beta, f, lang_dataset=None):
-    batch = next(dataset)
-    lang_batch = next(lang_dataset) if args.use_language else None
-    f(batch, beta, lang_batch)
-
-#@tf.function
 
 while t < args.train_steps:
     start_time = time.time()

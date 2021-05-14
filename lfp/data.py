@@ -399,7 +399,7 @@ def load_traj_tf_records(filenames, ordered=False):
 
 class labelled_dl():
         def __init__(self,
-            label_type='label',  # 'tags' for numbered types or 'labels'
+            label_type='label',  # 'tag' for numbered types or 'labels'
             include_images=True,
             sim = 'Unity',
             num_workers=4,
@@ -502,7 +502,7 @@ class distributed_data_coordinator:
         ######################################### Plotting
         self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
         # For use with lang and plotting the colored dots
-        tagged_dl = labelled_dl(label_type='tags', sim = args.sim)
+        tagged_dl = labelled_dl(label_type='tag', sim = args.sim)
         self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
 
         ######################################### Languagee

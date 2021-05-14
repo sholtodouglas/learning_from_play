@@ -246,3 +246,33 @@ This the language model
 "https://tfhub.dev/google/universal-sentence-encoder/4"
 
 https://stackoverflow.com/questions/60578801/how-to-load-tf-hub-model-from-local-system
+
+
+
+
+
+python3 train_lfp.py \
+300kImB0_02 \
+--bulk_dataset Unity/envHz25 \
+--train_dataset Unity/diverse \
+--test_dataset Unity/diverse_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.02 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 0.6 \
+--bulk_split 0.4 \
