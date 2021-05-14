@@ -480,13 +480,13 @@ class distributed_data_coordinator:
         self.args = args
 
         # bulk is like backup data that we won't have much of but enough for the diversity
-        GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
+        self.GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
         # If we didn't set the split, assume everything in our main train/test DS
         if standard_split == 0: 
             standard_split = args.batch_size
         self.bulk_split, self.standard_split, self.lang_split, self.video_split = int(bulk_split* NUM_DEVICES), int(standard_split* NUM_DEVICES), int(lang_split* NUM_DEVICES), int(video_split* NUM_DEVICES)
         print(f"Our dataset split is {self.bulk_split} bulk, {self.standard_split} specific, {self.lang_split} lang, {self.video_split} video")
-        assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == GLOBAL_BATCH_SIZE
+        assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == self.GLOBAL_BATCH_SIZE
         if args.use_language: assert self.lang_split > 0
         
         ########################################## Train
