@@ -212,7 +212,7 @@ if args.resume:
   load_weights(model_path, actor, encoder, planner, with_optimizer=True)
   print('Loaded model weights and optimiser state')
   
-  prognar.add(t, []) # update the progbar to the most recent point
+  progbar.add(t, []) # update the progbar to the most recent point
 else:
   #Comet
   experiment = Experiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",project_name="learning-from-play",workspace="sholtodouglas")
@@ -229,12 +229,15 @@ from lfp.metric import log # gets state and clears simultaneously
 
 while t < args.train_steps:
     start_time = time.time()
-
-    trainer.distributed_train_step(dataset_coordinator.next(), args.beta)
+    inputs = dataset_coordinator.next()
+    inputs['beta'] = args.beta
+    trainer.distributed_train_step(inputs)
 
     if t % valid_inc == 0:
 
-        trainer.distributed_test_step(dataset_coordinator.next_valid(), args.beta)
+        inputs = dataset_coordinator.next_valid()
+        inputs['beta'] = args.beta
+        trainer.distributed_test_step(inputs)
 
         step_time = round(time.time() - start_time, 1)
 
