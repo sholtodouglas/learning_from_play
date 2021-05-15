@@ -382,7 +382,9 @@ class LFPTrainer():
             # Plot just needs the first four...? Meh it can do that itself.
 
 
-    def train_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None, bulk=None):
+    def train_step(self, **kwargs):
+        inputs, beta, lang_labelled_inputs, external_videos, bulk = kwargs['batch'], kwargs['beta'], kwargs['lang'],kwargs['video'],kwargs['bulk']
+
         if bulk is not None:
             inputs = {k: tf.concat([inputs[k], bulk[k]]) for k in inputs.keys()} # combine them
 
@@ -461,7 +463,9 @@ class LFPTrainer():
         return record(loss, self.metrics['train_loss'])
 
 
-    def test_step(self, inputs, beta, lang_labelled_inputs=None, external_videos=None):
+    def test_step(self, **kwargs):
+        inputs, beta, lang_labelled_inputs, external_videos, bulk = kwargs['batch'], kwargs['beta'], kwargs['lang'], kwargs['video']
+
         inputs = self.make_sequences_variable_length(inputs) # 
         actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
@@ -490,14 +494,16 @@ class LFPTrainer():
 
 
     @tf.function
-    def distributed_train_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None, bulk=None):
-        per_replica_losses = self.strategy.run(self.train_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos, bulk))
+    def distributed_train_step(self,inputs, beta):
+        inputs['beta'] = beta
+        per_replica_losses = self.strategy.run(self.train_step, kwargs=inputs)
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
     @tf.function
-    def distributed_test_step(self, dataset_inputs, beta, lang_labelled_inputs=None, external_videos=None):
-        per_replica_losses = self.strategy.run(self.test_step, args=(dataset_inputs, beta, lang_labelled_inputs, external_videos))
+    def distributed_test_step(self, inputs, beta):
+        inputs['beta'] = beta
+        per_replica_losses = self.strategy.run(self.test_step, kwargs=inputs)
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 

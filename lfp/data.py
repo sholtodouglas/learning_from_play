@@ -518,14 +518,14 @@ class distributed_data_coordinator:
         
     def next(self):
         batch = next(self.standard_dataset) 
-        lang = next(self.lang_dataset) if self.args.use_language else None
-        video = next(self.video_dataset) if self.args.use_contrastive else None
-        bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else None # combine batch and standard on device
-        return batch, lang, video, bulk
+        lang = next(self.lang_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+        video = next(self.video_dataset) if self.args.use_contrastive else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+        bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else tf.constant(0.0) # combine batch and standard on device
+        return {'batch':batch, 'lang':lang, 'video':video, 'bulk':bulk}
 
     def next_valid(self):
         batch = next(self.valid_dataset)
         # no standard - just test whatever we are validiating against
-        lang = next(self.lang_valid_dataset) if self.args.use_language else None
-        video = next(self.video_valid_dataset) if self.args.use_contrastive else None
-        return batch, lang, video
+        lang = next(self.lang_valid_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+        video = next(self.video_valid_dataset) if self.args.use_contrastive else tf.constant(0.0) # uing 0 constants as distribute strat hates none
+        return {'batch': batch, 'lang': lang, 'video': video}

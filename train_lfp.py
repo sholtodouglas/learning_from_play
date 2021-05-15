@@ -229,12 +229,12 @@ from lfp.metric import log # gets state and clears simultaneously
 
 while t < args.train_steps:
     start_time = time.time()
-    batch, lang, video, bulk = dataset_coordinator.next()
-    trainer.distributed_train_step(batch, args.beta, lang, video, bulk)
+
+    trainer.distributed_train_step(dataset_coordinator.next(), args.beta)
 
     if t % valid_inc == 0:
-        batch, lang, video = dataset_coordinator.next_valid()
-        trainer.distributed_test_step(batch, args.beta, lang, video)
+
+        trainer.distributed_test_step(dataset_coordinator.next_valid(), args.beta)
 
         step_time = round(time.time() - start_time, 1)
 
