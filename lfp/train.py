@@ -111,7 +111,7 @@ class LFPTrainer():
         self.planner_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=planner_clip)
         self.cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=cnn_clip)
         self.gripper_cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=gripper_cnn_clip)
-        self.img_embed_mapper_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
+        self.img_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
         self.lang_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
@@ -126,8 +126,8 @@ class LFPTrainer():
         self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
         self.metrics['cnn_grad_norm'] = tf.keras.metrics.Mean(name='cnn_grad_norm')
         self.metrics['gripper_cnn_grad_norm'] = tf.keras.metrics.Mean(name='gripper_cnn_grad_norm')
-        self.metrics['img_embed_mapper_norm'] = tf.keras.metrics.Mean(name='img_embed_mapper_norm')
-        self.metrics['lang_embed_to_goal_norm'] = tf.keras.metrics.Mean(name='lang_embed_to_goal_norm')
+        self.metrics['img_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='img_embed_to_goal_space_norm')
+        self.metrics['lang_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='lang_embed_to_goal_space_norm')
 
         self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
 
@@ -238,7 +238,7 @@ class LFPTrainer():
         states, actions,  goals, imgs, proprioceptive_features, goal_imgs, masks, sentence_embeddings = None, None, None, None, None, None, None, None
 
         if inputs is not None:
-            states, actions,  goals = inputs['obs'], inputs['acts'], inputs['goals']
+            states, actions,  goals, seq_lens, masks = inputs['obs'], inputs['acts'], inputs['goals'], inputs['seq_lens'], inputs['masks']
             indices['unlabelled'] = len(actions)
         # We want to concatenate the normal batch, lang_labelled_batch, and external videos, so that we can pass them all through 
         # the encoder at once, at the end, we'd like to return the langlabelled encodings(i.e encodings of lang labelled inputs and 
@@ -256,33 +256,32 @@ class LFPTrainer():
             
             if inputs is not None:
             # [B_unlab,T,H,W,C], [B_unlab,T,D], [B_unlab,H,W,C]
-                imgs, proprioceptive_features, goal_imgs, masks = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs'], inputs['masks']
+                imgs, proprioceptive_features, goal_imgs, = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
             
             # Frankly only care about these in the context of images
             
-            if self.args.use_language and lang_labelled_inputs is not None:
+            if self.args.use_language:
 
                 indices['labelled'] = indices['unlabelled'] + len(lang_labelled_inputs['acts'])
                 if inputs is None:
                     imgs, proprioceptive_features, goal_imgs, actions, masks = lang_labelled_inputs['imgs'], lang_labelled_inputs['proprioceptive_features'], lang_labelled_inputs['goal_imgs'], lang_labelled_inputs['acts'], lang_labelled_inputs['masks']
                 else:
                 #  [B_unlab + Blab, T, H, W, C],  [B_unlab + Blab, T, D], [B_unlab + Blab, H, W, C], [B_unlab + Blab, T, D]
-                    imgs, proprioceptive_features, goal_imgs, actions, masks = tf.concat([imgs, lang_labelled_inputs['imgs']], 0),\
+                    imgs, proprioceptive_features, goal_imgs, actions, masks, seq_lens = tf.concat([imgs, lang_labelled_inputs['imgs']], 0),\
                                                                 tf.concat([proprioceptive_features, lang_labelled_inputs['proprioceptive_features']], 0), \
                                                                 tf.concat([goal_imgs, lang_labelled_inputs['goal_imgs']], 0), \
                                                                 tf.concat([actions, lang_labelled_inputs['acts']], 0),\
-                                                                tf.concat([masks, lang_labelled_inputs['masks']], 0)
+                                                                tf.concat([masks, lang_labelled_inputs['masks']], 0),\
+                                                                tf.concat([seq_lens, tf.cast(lang_labelled_inputs['seq_lens'], tf.float32)],0)
 
                 sentence_embeddings = lang_labelled_inputs['label_embeddings']
 
                 
                 # contrastive only makes sense in the language context
-                if self.args.use_contrastive and external_videos is not None:
+                if self.args.use_contrastive:
                     indices['vids'] =  indices['labelled'] + len(external_videos['imgs'])
                      # B_i +Bll, T, H, W, C
-                    imgs, goal_imgs, masks = tf.concat([imgs, external_videos['imgs']], 0), \
-                                      tf.concat([goal_imgs, external_videos['goal_imgs']], 0), \
-                                      tf.concat([masks, external_videos['masks']], 0)
+                    imgs, goal_imgs, masks = tf.concat([imgs, external_videos['imgs']], 0), tf.concat([goal_imgs, external_videos['goal_imgs']], 0), tf.concat([masks, external_videos['masks']], 0)  # don't need seq lens from these as it is only used on action level loss
                     sentence_embeddings = tf.concat([sentence_embeddings, external_videos['label_embeddings']], 0)
 
                 # project the sentence embeddings to the same space as the goal
@@ -304,16 +303,19 @@ class LFPTrainer():
             unlabelled_goal_embeddings = img_in_goal_space[:indices['unlabelled']]
             # we want some images, some sentence embeddings
             if self.args.use_language:
-                image_fraction = int(indices['labelled'] + ((indices['labelled']-indices['unlabelled']) * self.args.sub_out_language_percent))
-                labelled_goal_embeddings = tf.concat([img_in_goal_space[indices['unlabelled']:image_fraction], \
-                                                    img_in_goal_space[image_fraction:indices['labelled']]],0)
-                goals = tf.concat([unlabelled_goal_embeddings, labelled_goal_embeddings],0)
+                # 0 ..[unlabelled data]............................................ unlablled ...[image fraction of lang labelled data].... image_fraction .......[lang labelled data].......labelled .................[video data].....................vids
+                image_fraction = int(indices['unlabelled'] + ((indices['labelled']-indices['unlabelled']) * self.args.sub_out_language_percent))
+                lang_use_img_embeddings = img_in_goal_space[indices['unlabelled']:image_fraction]
+                lang_use_lang_embeddings = goal_sentence_embeddings[len(lang_use_img_embeddings):indices['labelled']]
+                labelled_goal_embeddings = tf.concat([lang_use_img_embeddings, lang_use_lang_embeddings],0)
+                goals = tf.concat([unlabelled_goal_embeddings, labelled_goal_embeddings],0) # Bunlab + Blab, D
                 # Same for the vids
                 if self.args.use_contrastive:
-                    image_fraction = int(indices['unlabelled'] + ((indices['vids']-indices['unlabelled']) * self.args.sub_out_language_percent))
-                    video_goal_embeddings = tf.concat([img_in_goal_space[indices['labelled']:image_fraction], \
-                                                        img_in_goal_space[image_fraction:indices['vids']]],0)
-                    goals = tf.concat([goals, video_goal_embeddings],0)
+                  image_fraction = int(indices['unlabelled'] + ((indices['vids']-indices['unlabelled']) * self.args.sub_out_language_percent))
+                  vids_use_img_embeddings = img_in_goal_space[indices['labelled']:image_fraction]
+                  vids_use_lang_embeddings = goal_sentence_embeddings[len(labelled_goal_embeddings):]
+                  video_goal_embeddings = tf.concat([vids_use_img_embeddings, vids_use_lang_embeddings],0)
+                  goals = tf.concat([goals, video_goal_embeddings],0)
                 # B,1,embedsize
                 
             else:
@@ -340,6 +342,7 @@ class LFPTrainer():
                 states = tf.concat([states, gripper_embeddings], -1)
 
 
+        print(states.shape, goals.shape, actions.shape)
         if self.args.gcbc:
             distrib = self.actor([states, goals])
             return distrib
@@ -366,8 +369,8 @@ class LFPTrainer():
 
             enc_policy = self.actor([states, z_enc_tiled, goals])
             plan_policy = self.actor([states, z_plan_tiled, goals]) 
-
-            return enc_policy, plan_policy, encoding, plan, indices, sentence_embeddings
+            print(enc_policy.shape, plan_policy.shape)
+            return enc_policy, plan_policy, encoding, plan, indices, actions, masks, seq_lens, sentence_embeddings
             # How is step used?
             # In the train and test functions below, where we use enc policy for logloss, plan policy for validation mae, encoding and plan for reg loss
                 # Additionally, for contrastive loss we need to get the encodings of the lang labelled and vids only, and their sentence embeddings
@@ -386,7 +389,6 @@ class LFPTrainer():
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
                                 tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape:
 
-            actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
 
             if self.args.gcbc:
                 policy = self.step(inputs)
@@ -394,7 +396,7 @@ class LFPTrainer():
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
-                enc_policy, plan_policy, encoding, plan, indices, sentence_embeddings = self.step(inputs, lang_labelled_inputs, external_videos)
+                enc_policy, plan_policy, encoding, plan, indices, actions, mask, seq_lens, sentence_embeddings = self.step(inputs, lang_labelled_inputs, external_videos)
                 
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 if self.args.discrete:
@@ -410,7 +412,7 @@ class LFPTrainer():
                     planner_gradients = self.compute_fp16_grads(self.planner_optimizer, loss, planner_tape, self.planner)
                     if self.args.images: 
                         cnn_gradients = self.compute_fp16_grads(self.cnn_optimizer, loss, cnn_tape, self.cnn)
-                        goal_mapper_grads = self.compute_fp16_grads(self.img_embed_mapper_optimizer, loss, img_goal_embed_tape, self.img_embed_to_goal_space) 
+                        goal_to_goal_space_grads = self.compute_fp16_grads(self.img_embed_to_goal_space_optimizer, loss, img_goal_embed_tape, self.img_embed_to_goal_space) 
                     if self.args.gripper_images: gripper_cnn_gradients = self.compute_fp16_grads(self.gripper_cnn_optimizer, loss, gripper_cnn_tape, self.gripper_cnn)
                     if self.args.use_language: raise NotImplementedError
                 else:
@@ -419,9 +421,9 @@ class LFPTrainer():
                     planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
                     if self.args.images: 
                         cnn_gradients = cnn_tape.gradient(loss, self.cnn.trainable_variables)
-                        img_goal_mapper_grads = img_goal_embed_tape.gradient(loss, self.img_embed_to_goal_space.trainable_variables)
+                        img_goal_to_goal_space_grads = img_goal_embed_tape.gradient(loss, self.img_embed_to_goal_space.trainable_variables)
                     if self.args.gripper_images: gripper_cnn_gradients = gripper_cnn_tape.gradient(loss, self.gripper_cnn.trainable_variables)
-                    if self.args.use_language: lang_goal_mapper_grads = lang_goal_embed_tape.gradients(loss, self.lang_embed_to_goal_space.trainable_variables)
+                    if self.args.use_language: lang_goal_to_goal_space_grads = lang_goal_embed_tape.gradient(loss, self.lang_embed_to_goal_space.trainable_variables)
 
 
                 #################### Calc indivual norms
@@ -430,15 +432,15 @@ class LFPTrainer():
                 planner_norm = record(tf.linalg.global_norm(planner_gradients), self.metrics['planner_grad_norm'])
                 if self.args.images: 
                     cnn_norm = record(tf.linalg.global_norm(cnn_gradients), self.metrics['cnn_grad_norm'])
-                    img_goal_mapper_norm = record(tf.linalg.global_norm(img_goal_mapper_grads), self.metrics['img_embed_mapper_norm'])
+                    img_goal_to_goal_space_norm = record(tf.linalg.global_norm(img_goal_to_goal_space_grads), self.metrics['img_embed_to_goal_space_norm'])
                 if self.args.gripper_images: gripper_cnn_norm = record(tf.linalg.global_norm(gripper_cnn_gradients), self.metrics['gripper_cnn_grad_norm'])
-                if self.args.use_language: lang_goal_mapper_norm = record(tf.linalg.global_norm(lang_goal_mapper_grads), self.metrics['lang_embed_mapper_norm'])
+                if self.args.use_language: lang_goal_to_goal_space_norm = record(tf.linalg.global_norm(lang_goal_to_goal_space_grads), self.metrics['lang_embed_to_goal_space_norm'])
 
                 ##################### Calc global grad norm
                 gradients = actor_gradients + encoder_gradients + planner_gradients
-                if self.args.images: gradients = gradients + cnn_gradients + img_goal_mapper_grads
+                if self.args.images: gradients = gradients + cnn_gradients + img_goal_to_goal_space_grads
                 if self.args.gripper_images: gradients += gripper_cnn_gradients
-                if self.args.use_language: gradients += lang_goal_mapper_grads
+                if self.args.use_language: gradients += lang_goal_to_goal_space_grads
                 record(tf.linalg.global_norm(gradients), self.metrics['global_grad_norm'])
 
                 #################### Apply optimizer updates
@@ -447,9 +449,9 @@ class LFPTrainer():
                 if not self.args.discrete: self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables)) # TODO TRAIN AS SECOND STAGE
                 if self.args.images: 
                     self.cnn_optimizer.apply_gradients(zip(cnn_gradients, self.cnn.trainable_variables))
-                    self.img_embed_mapper_optimizer.apply_gradients(zip(img_goal_mapper_grads, self.img_embed_to_goal_space.trainable_variables))
+                    self.img_embed_to_goal_space_optimizer.apply_gradients(zip(img_goal_to_goal_space_grads, self.img_embed_to_goal_space.trainable_variables))
                 if self.args.gripper_images: self.gripper_cnn_optimizer.apply_gradients(zip(gripper_cnn_gradients, self.gripper_cnn.trainable_variables))
-                if self.args.use_language: self.lang_embed_mapper_optimizer.apply_gradients(zip(lang_goal_mapper_grads, self.lang_embed_to_goal_space.trainable_variables))
+                if self.args.use_language: self.lang_embed_to_goal_space_optimizer.apply_gradients(zip(lang_goal_to_goal_space_grads, self.lang_embed_to_goal_space.trainable_variables))
                 ################### Fin
 
 

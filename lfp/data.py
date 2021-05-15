@@ -485,7 +485,7 @@ class distributed_data_coordinator:
         if standard_split == 0: 
             standard_split = args.batch_size
         self.bulk_split, self.standard_split, self.lang_split, self.video_split = int(bulk_split* NUM_DEVICES), int(standard_split* NUM_DEVICES), int(lang_split* NUM_DEVICES), int(video_split* NUM_DEVICES)
-        print(f"Our dataset split is {self.bulk_split} bulk, {self.standard_split} specific, {self.lang_split} lang, {self.video_split} video")
+        print(f"Our dataset split is {self.standard_split} specific, {self.lang_split} lang, {self.video_split} video, {self.bulk_split} bulk")
         assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == self.GLOBAL_BATCH_SIZE
         if args.use_language: assert self.lang_split > 0
         
