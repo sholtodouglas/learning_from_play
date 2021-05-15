@@ -12,8 +12,9 @@ import numpy as np
 import time
 import threading
 
-UNITY_MAX_OBS_SIZE = 7+ 7 + 3 + 1 + 1 + 7 + 9
-UNITY_MAX_AG_SIZE = 7+3+1+1+1+7+9 # obj1, buttons, drawer, door, obj2presence, obj2, buttonxyzs
+UNITY_MAX_AG_SIZE = 7+3+1+1+1+7+9
+UNITY_MAX_OBS_SIZE = 7+ UNITY_MAX_AG_SIZE
+ # obj1, buttons, drawer, door, obj2presence, obj2, buttonxyzs
 
 def rosImg_to_numpy(img): # : ImageMsg
     image_height = img.width
