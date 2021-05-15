@@ -378,7 +378,7 @@ class LFPTrainer():
     def train_step(self, **kwargs):
         inputs, beta, lang_labelled_inputs, external_videos, bulk = kwargs['batch'], kwargs['beta'], kwargs['lang'],kwargs['video'],kwargs['bulk']
 
-        if bulk is not None:
+        if args.bulk_split > 0:
             inputs = {k: tf.concat([inputs[k], bulk[k]], axis=0) for k in inputs.keys()} # combine them
 
         inputs = self.make_sequences_variable_length(inputs) 
