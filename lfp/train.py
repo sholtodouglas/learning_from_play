@@ -151,6 +151,13 @@ class LFPTrainer():
         self.metrics['valid_enc_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_enc_max_rotation_loss')
         self.metrics['valid_enc_gripper_loss'] = tf.keras.metrics.Mean(name='valid_enc_rotation_loss')
 
+
+        self.metrics['valid_lang_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
+        self.metrics['valid_lang_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
+        self.metrics['valid_lang_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
+        self.metrics['valid_lang_max_rotation_loss'] = lfp.metric.MaxMetric(name='valid_max_rotation_loss')
+        self.metrics['valid_lang_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
+
         self.chkpt_manager = None
 
     def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
@@ -469,7 +476,7 @@ class LFPTrainer():
             log_action_breakdown(policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
                                  self.valid_rotation_loss, self.valid_max_rotation_loss, self.valid_gripper_loss, self.compute_MAE)
         else:
-            enc_policy, plan_policy, encoding, plan, indices, sentence_embedding = self.step(inputs, lang_labelled_inputs, external_videos)
+            enc_policy, plan_policy, encoding, plan, indices, actions, mask, seq_lens, sentence_embeddings = self.step(inputs, lang_labelled_inputs, external_videos)
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
             
             if self.args.discrete:
@@ -484,6 +491,12 @@ class LFPTrainer():
                                  self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
                 log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_enc_position_loss'], \
                                  self.metrics['valid_enc_max_position_loss'], self.metrics['valid_enc_rotation_loss'], self.metrics['valid_enc_max_rotation_loss'], self.metrics['valid_enc_gripper_loss'], self.compute_MAE)
+                
+                if self.args.use_language:
+                    log_action_breakdown(plan_policy[indices['unlabelled']:], actions[indices['unlabelled']:], mask[indices['unlabelled']:], seq_lens[indices['unlabelled']:], self.args.num_distribs is not None, self.dl.quaternion_act,
+                     self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
+                         self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
+
         return record(loss,self.metrics['valid_loss'])
 
 
