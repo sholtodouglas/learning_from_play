@@ -232,13 +232,6 @@ class LFPTrainer():
         inputs is normal inputs without sentence labels : obs, acts, goals, imgs, proprioceptive_features, goal_imgs, mask
 
         '''
-        assert inputs is not None or lang_labelled_inputs is not None or external_videos is not None
-        if lang_labelled_inputs is not None and not self.args.use_language:
-            print('Should you set the language flag true?'), 
-            raise NotImplementedError
-        if external_videos is not None and not self.args.use_language:
-            print('Should you set the contrastive flag true?'), 
-            raise NotImplementedError
             
         indices = {'unlabelled': 0, 'labelled':0, 'vids':0}
 
@@ -310,13 +303,13 @@ class LFPTrainer():
             # as we don't have amy sentence labels here, just take all img embeddings
             unlabelled_goal_embeddings = img_in_goal_space[:indices['unlabelled']]
             # we want some images, some sentence embeddings
-            if self.args.use_language and lang_labelled_inputs is not None:
+            if self.args.use_language:
                 image_fraction = int(indices['labelled'] + ((indices['labelled']-indices['unlabelled']) * self.args.sub_out_language_percent))
                 labelled_goal_embeddings = tf.concat([img_in_goal_space[indices['unlabelled']:image_fraction], \
                                                     img_in_goal_space[image_fraction:indices['labelled']]],0)
                 goals = tf.concat([unlabelled_goal_embeddings, labelled_goal_embeddings],0)
                 # Same for the vids
-                if self.args.use_contrastive and external_videos is not None:
+                if self.args.use_contrastive:
                     image_fraction = int(indices['unlabelled'] + ((indices['vids']-indices['unlabelled']) * self.args.sub_out_language_percent))
                     video_goal_embeddings = tf.concat([img_in_goal_space[indices['labelled']:image_fraction], \
                                                         img_in_goal_space[image_fraction:indices['vids']]],0)
@@ -335,7 +328,7 @@ class LFPTrainer():
             if self.args.gripper_images:
                 if inputs is not None:
                     gripper_imgs = inputs['gripper_imgs']
-                if self.args.use_language and lang_labelled_inputs is not None:
+                if self.args.use_language:
                     if inputs is None: # Get rid of this if else hell later TODO
                         gripper_imgs = lang_labelled_inputs['gripper_imgs']
                     else:
