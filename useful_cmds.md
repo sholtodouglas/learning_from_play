@@ -252,14 +252,14 @@ https://stackoverflow.com/questions/60578801/how-to-load-tf-hub-model-from-local
 
 
 python3 train_lfp.py \
-diverseIMB0_02 \
+test \
 --bulk_datasets unity/envHz25 \
 --train_datasets unity/diverse \
 --test_datasets unity/diverse_test \
 -tfr \
 -s GCS \
 -d TPU \
--b 32 \
+-b 64 \
 -la 2048 \
 -le 512 \
 -lp 2048 \
@@ -274,8 +274,8 @@ diverseIMB0_02 \
 -gi \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 24 \
---bulk_split 8
+--standard_split 48 \
+--bulk_split 16
 
 
 python3 train_lfp.py \

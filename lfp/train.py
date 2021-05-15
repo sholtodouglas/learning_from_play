@@ -342,7 +342,7 @@ class LFPTrainer():
                 states = tf.concat([states, gripper_embeddings], -1)
 
 
-        print(states.shape, goals.shape, actions.shape)
+
         if self.args.gcbc:
             distrib = self.actor([states, goals])
             return distrib
@@ -369,7 +369,6 @@ class LFPTrainer():
 
             enc_policy = self.actor([states, z_enc_tiled, goals])
             plan_policy = self.actor([states, z_plan_tiled, goals]) 
-            print(enc_policy.shape, plan_policy.shape)
             return enc_policy, plan_policy, encoding, plan, indices, actions, masks, seq_lens, sentence_embeddings
             # How is step used?
             # In the train and test functions below, where we use enc policy for logloss, plan policy for validation mae, encoding and plan for reg loss
