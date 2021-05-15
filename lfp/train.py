@@ -493,9 +493,10 @@ class LFPTrainer():
                                  self.metrics['valid_enc_max_position_loss'], self.metrics['valid_enc_rotation_loss'], self.metrics['valid_enc_max_rotation_loss'], self.metrics['valid_enc_gripper_loss'], self.compute_MAE)
                 
                 if self.args.use_language:
-                    log_action_breakdown(plan_policy[indices['unlabelled']:], actions[indices['unlabelled']:], mask[indices['unlabelled']:], seq_lens[indices['unlabelled']:], self.args.num_distribs is not None, self.dl.quaternion_act,
-                     self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
-                         self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
+                  # setting probabilistic = false and just passing in the .sample() of the distrib as for some reason slicing it auto samples?
+                  log_action_breakdown(plan_policy.sample()[indices['unlabelled']:], actions[indices['unlabelled']:], mask[indices['unlabelled']:], seq_lens[indices['unlabelled']:], False, self.dl.quaternion_act,
+                    self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
+                        self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
 
         return record(loss,self.metrics['valid_loss'])
 
