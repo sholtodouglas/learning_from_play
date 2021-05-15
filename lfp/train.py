@@ -457,7 +457,7 @@ class LFPTrainer():
 
 
     def test_step(self, **kwargs):
-        inputs, beta, lang_labelled_inputs, external_videos, bulk = kwargs['batch'], kwargs['beta'], kwargs['lang'], kwargs['video']
+        inputs, beta, lang_labelled_inputs, external_videos = kwargs['batch'], kwargs['beta'], kwargs['lang'], kwargs['video']
 
         inputs = self.make_sequences_variable_length(inputs) # 
         actions, seq_lens, mask = inputs['acts'], inputs['seq_lens'], inputs['masks']
