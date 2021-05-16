@@ -310,7 +310,7 @@ class LFPTrainer():
             unlabelled_goal_embeddings = img_in_goal_space[:indices['unlabelled']]
             # we want some images, some sentence embeddings
             if self.args.use_language:
-                # 0 ..[unlabelled data]............................................ unlablled ...[image fraction of lang labelled data].... image_fraction .......[lang labelled data].......labelled .................[video data].....................vids
+                # 0 ..[unlabelled data].......... unlablled ...[image fraction of lang labelled data].... image_fraction .......[lang labelled data].......labelled .................[video data].....................vids
                 image_fraction = int(indices['unlabelled'] + ((indices['labelled']-indices['unlabelled']) * self.args.sub_out_language_percent))
                 lang_use_img_embeddings = img_in_goal_space[indices['unlabelled']:image_fraction]
                 lang_use_lang_embeddings = goal_sentence_embeddings[len(lang_use_img_embeddings):indices['labelled']]
@@ -357,7 +357,12 @@ class LFPTrainer():
             # TODO: If check on whether to use actions in the VAE
             # TODO: Modify encoder to not need actions? Urghghghghghghghghghghghghghghghghghghgh fuck you keras
             # TODO: Only relevant once contrastive in the works
-            encoding = self.encoder([states, actions])
+            if self.args.encode_actions:
+                to_encode = tf.concat([states, actions],-1)
+            else:
+                to_encode = states
+            
+            encoding = self.encoder([to_encode])
             plan = self.planner([states[:, 0, :], goals[:, 0,
                                                   :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
             if self.args.discrete:
@@ -559,6 +564,7 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
     if args.gripper_images: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
         model_params['obs_dim'] += args.gripper_img_embedding_size 
 
+
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
     if args.gcbc:
@@ -566,10 +572,15 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
         planner = None
     else:
         model_params['layer_size'] = args.encoder_layer_size
+        if args.encode_actions:
+            model_params['enc_in_dim'] = model_params['obs_dim'] + model_params['act_dim']
+        else:
+            model_params['enc_in_dim'] = model_params['obs_dim']
         if args.discrete:
           encoder = lfp.model.create_discrete_encoder(**model_params)
         else:
           encoder = lfp.model.create_encoder(**model_params)
+          
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
 

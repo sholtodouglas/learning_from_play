@@ -108,15 +108,13 @@ def create_actor(obs_dim, act_dim, goal_dim,
             return Model([o, z, g], actions)
 
 
-def create_encoder(obs_dim, act_dim,
+def create_encoder(enc_in_dim,
                    layer_size=2048, latent_dim=256, epsilon=1e-4, training=True, **kwargs):
     # Input #
-    obs = Input(shape=(None, obs_dim), dtype=tf.float32, name='obs')
-    acts = Input(shape=(None, act_dim), dtype=tf.float32, name='acts')
+    inputs = Input(shape=(None, enc_in_dim), dtype=tf.float32, name='encoder_in')
 
     # Layers #
-    x = Concatenate(axis=-1)([obs, acts])
-    x = Masking(mask_value=0.)(x)
+    x = Masking(mask_value=0.)(inputs)
     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
     x = Bidirectional(LSTM(layer_size, return_sequences=False), merge_mode='concat')(x)
 
@@ -125,7 +123,7 @@ def create_encoder(obs_dim, act_dim,
     scale = Dense(latent_dim, activation="softplus", name='sigma')(x + epsilon)
 
     mixture = tfpl.DistributionLambda(latent_normal, name='latent_variable')((mu, scale))
-    return Model([obs, acts], mixture)
+    return Model([inputs], mixture)
 
 
 def create_discrete_encoder(obs_dim, act_dim, layer_size=2048, latent_dim=1024, **kwargs):
