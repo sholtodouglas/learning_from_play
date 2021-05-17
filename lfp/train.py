@@ -357,7 +357,7 @@ class LFPTrainer():
             if self.args.encode_all:
                 to_encode = tf.concat([states, actions],-1)
             else:
-                to_encode = states
+                to_encode = img_embeddings
             
             encoding = self.encoder([to_encode])
             plan = self.planner([states[:, 0, :], goals[:, 0,
