@@ -271,7 +271,7 @@ class LFPTrainer():
 
                 indices['labelled'] = indices['unlabelled'] + len(lang_labelled_inputs['acts'])
                 if inputs is None:
-                    imgs, proprioceptive_features, goal_imgs, actions, masks = lang_labelled_inputs['imgs'], lang_labelled_inputs['proprioceptive_features'], lang_labelled_inputs['goal_imgs'], lang_labelled_inputs['acts'], lang_labelled_inputs['masks']
+                    imgs, proprioceptive_features, goal_imgs, actions, masks, seq_lens = lang_labelled_inputs['imgs'], lang_labelled_inputs['proprioceptive_features'], lang_labelled_inputs['goal_imgs'], lang_labelled_inputs['acts'], lang_labelled_inputs['masks'], tf.cast(lang_labelled_inputs['seq_lens'], tf.float32)
                 else:
                 #  [B_unlab + Blab, T, H, W, C],  [B_unlab + Blab, T, D], [B_unlab + Blab, H, W, C], [B_unlab + Blab, T, D]
                     imgs, proprioceptive_features, goal_imgs, actions, masks, seq_lens = tf.concat([imgs, lang_labelled_inputs['imgs']], 0),\
@@ -354,10 +354,7 @@ class LFPTrainer():
             distrib = self.actor([states, goals])
             return distrib
         else:
-            # TODO: If check on whether to use actions in the VAE
-            # TODO: Modify encoder to not need actions? Urghghghghghghghghghghghghghghghghghghgh fuck you keras
-            # TODO: Only relevant once contrastive in the works
-            if self.args.encode_actions:
+            if self.args.encode_all:
                 to_encode = tf.concat([states, actions],-1)
             else:
                 to_encode = states
@@ -572,10 +569,10 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
         planner = None
     else:
         model_params['layer_size'] = args.encoder_layer_size
-        if args.encode_actions:
+        if args.encode_all:
             model_params['enc_in_dim'] = model_params['obs_dim'] + model_params['act_dim']
         else:
-            model_params['enc_in_dim'] = model_params['obs_dim']
+            model_params['enc_in_dim'] = args.img_embedding_size
         if args.discrete:
           encoder = lfp.model.create_discrete_encoder(**model_params)
         else:
