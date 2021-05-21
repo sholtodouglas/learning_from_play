@@ -1,8 +1,9 @@
 try:
     import rospy
     from sensor_msgs.msg import Image as ImageMsg
-    from robotics_demo.msg import Observation, ToRecord, QuaternionProprioState, PositionCommand, Goal, TimerBeat,\
-        RPYProprioState, AchievedGoal, JointPositions
+    from robotics_demo.msg import JointPositions, Observation, AchievedGoal, PositionCommand, RPYProprioState, Velocities, ResetInfo, ToRecord, RPYState, Reengage,  QuaternionProprioState,  Goal, TimerBeat
+    from robotics_demo.srv import getIK, getIKResponse, getState, getStateResponse, getTime, getTimeResponse
+    import time
     from PIL import Image, ImageOps
     import pybullet
 except:
@@ -52,3 +53,72 @@ def act_to_jointPositionsROSmsg(j: np.ndarray):
 
 def unstack(a, axis = 0):
     return [np.take(a, i, axis = axis) for i in range(a.shape[axis])]
+
+
+
+    
+def process_observation_srv():
+    '''
+    The full state will be sent out at Nh > controlHz by the env, listen to it, and save the relevant parts
+    '''
+    global ros_shoulder_image, ros_gripper_image
+    o = getStateServ(int(1)).state
+    proprioceptive_state  = proprio_quat_to_rpy_vector(o.proprio)
+    achieved_goal = ag_to_vector(o.ag)
+    full_state = np.concatenate([proprioceptive_state, achieved_goal])
+    # process the images
+    o.shoulderImage.data += (o.imq2 + o.imq3 + o.imq4)
+    ros_shoulder_image = o.shoulderImage
+    ros_gripper_image = o.gripperImage
+    shoulder_image  = rosImg_to_numpy(ros_shoulder_image)[:,:,:3]
+    gripper_image = rosImg_to_numpy(ros_gripper_image)[:,:,:3]
+    velocities = o.vels
+    gen_time = o.time
+    return proprioceptive_state, achieved_goal, shoulder_image, gripper_image, velocities, gen_time
+
+
+def check_reset_convergence(proprio, ag, current_proprio, current_ag, threshold = 0.01):
+    proprio_checks = abs(proprio - current_proprio) < threshold
+    ag_checks = abs(ag-current_ag) < threshold
+    all_checks = np.concatenate([proprio_checks, ag_checks])
+    return all_checks
+#     if np.all(all_checks):
+#         return True
+#     else:
+#         return False
+    
+def converge_on_reset(proprio, ag, threshold = 0.05):
+    t_start = time.time()
+    r = rospy.Rate(10) # 10hz 
+    while not rospy.is_shutdown():
+        t = time.time()
+        current_arm, current_ag, _,_, _,_ = process_observation_srv()
+        checks = check_reset_convergence(proprio, ag, current_arm, current_ag, threshold)
+        if (t > t_start+0.01):
+            idxs = np.where(checks == False)
+#             print(idxs, proprio[idxs], current_arm[idxs])
+            return
+        elif np.all(checks):
+            return
+        r.sleep() # ros sleep for a little while before checking convergence again
+        
+        
+
+
+def reset_to(arm, ag, prev_act = np.zeros(7)):
+    
+    arm_msg = proprio_rpy_to_ROSmsg(arm)
+    #prev_act = act_to_jointPositionsROSmsg(prev_act)
+    # Get IK for actual position
+    prev_act = JointPositions()
+    
+    
+    # Package into ResetInfo
+    for i in range(0,2):
+        joints = IK(arm_msg, prev_act).joints # once to align it with the prev acts
+        r = ResetInfo(joints, ag_to_ROSmsg(ag), Velocities())
+        # Send down
+        env_reset_pub.publish(r)
+    converge_on_reset(arm, ag, threshold = 0.05)
+    env_reEngage_collision_pub.publish(Reengage())
+    #time.sleep(1/TIME_FREQUENCY)

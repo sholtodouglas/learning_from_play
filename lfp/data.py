@@ -382,7 +382,7 @@ def read_traj_tfrecord(example):
               'tags': tag}
 
 
-def load_traj_tf_records(filenames, ordered=False):
+def load_traj_tf_records(filenames, read_func, ordered=False):
     # Read from TFRecords. For optimal performance, reading from multiple files at once and
     # disregarding data order. Order does not matter since we will be shuffling the data anyway.
 
@@ -393,7 +393,7 @@ def load_traj_tf_records(filenames, ordered=False):
 
     dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=4) # 
     dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
-    dataset = dataset.map(read_traj_tfrecord, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(read_func, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
 
@@ -405,7 +405,8 @@ class labelled_dl():
             num_workers=4,
             batch_size=64,
             shuffle_size=64,
-            normalize=False):
+            normalize=False,
+            read_func=read_traj_tfrecord):
 
             self.num_workers = num_workers
             self.include_images = include_images
@@ -414,6 +415,7 @@ class labelled_dl():
             self.shuffle_size = shuffle_size
             self.normalize = normalize
             self.label_type = label_type
+            self.read_func = read_func
 
             if self.normalize:
                 raise NotImplementedError
@@ -430,7 +432,7 @@ class labelled_dl():
                 records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
                 labelled_paths += [pth for pth in records if self.label_type  in pth]
 
-            return load_traj_tf_records(labelled_paths)
+            return load_traj_tf_records(labelled_paths, self.read_func)
 
         def load(self, dataset, batch_size=None):
             if batch_size == None:
@@ -455,8 +457,72 @@ class labelled_dl():
 
             return dataset
 
+################################################################### Serialise just videos
+###################################################################
+def serialise_vid(data):
+    
+    seq_lens, masks, imgs, goal_imgs,label, label_embedding, tag = data['seq_lens'], data['masks'], data['imgs'], data['goal_imgs'], data['label'], data['label_embedding'], data['tag']
+    
 
+    # seq_lens (1,)
+    # masks (1, 40)
+    # imgs (1, 1, 128, 128, 3)
+    # goal_imgs (1, 1, 128, 128, 3)
+    # label string
+    # label embedding [1,512]
+    # tag string
 
+    seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
+    masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
+    imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
+    goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
+    label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
+    label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
+    tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
+    
+    features = Features(feature={
+              'seq_lens':seq_lens,
+              'masks':masks,
+              'imgs':imgs,
+              'goal_imgs':goal_imgs,
+              'label': label,
+              'label_embedding': label_embedding,
+              'tag': tag})
+    
+    example = Example(features=features)
+    
+    return example.SerializeToString()
+
+def read_vid(example):
+    LABELED_TFREC_FORMAT = {
+            'seq_lens':tf.io.FixedLenFeature([], tf.int64),
+            'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'label':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'label_embedding':tf.io.FixedLenFeature([], tf.string),
+            'tag': tf.io.FixedLenFeature([], tf.string),
+    }
+    data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+    
+    seq_lens = tf.cast(data['seq_lens'], tf.int32) # this is meant to be 32 even though you serialize as 64
+    masks = tf.io.parse_tensor(data['masks'], tf.float32) 
+    imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)
+    goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
+    label = tf.io.parse_tensor(data['label'], tf.string)
+    label_embedding = tf.io.parse_tensor(data['label_embedding'], tf.float32)
+    tag = tf.io.parse_tensor(data['tag'], tf.string)
+    
+
+    return {  'seq_lens':seq_lens,
+              'masks':masks,
+              'imgs':imgs,
+              'goal_imgs':goal_imgs,
+              'labels': label,
+              'label_embeddings':label_embedding,
+              'tags': tag}
+
+### Can use the labelled_dl with read_func = read_vid to read
 
 # create dataloader which combines the  datasets, and outputs next - makes them distributed if necessary. 
 # This is so we can use TFrecord speed, but get the right proportions of various datasets (e.g a bulk pretraining one for extra data diversity)
