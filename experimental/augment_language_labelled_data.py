@@ -87,7 +87,7 @@ def augment(t, serialise):
     t['tag'] = t['tags']
     t['label'] = subout(t['labels'])
     print(t['label'])
-    t['label_embedding'] = tf.squeeze(embed([t['label']]))
+    t['label_embedding'] =  np.squeeze((embed([t['label']]))
     return serialise(t)
 
 
@@ -99,12 +99,15 @@ labelled_dl = lfp.data.labelled_dl(batch_size=1, include_images = True)
 for path in TRAIN_DATA_PATHS:
     label_it = iter(labelled_dl.extract([path]).repeat())
 
+
+    buff = [label_it.next() for i in range(0,100)]
+
     save_path = str(path/'tf_records')+f"/labelled_augmented.tfrecords"
     with tf.io.TFRecordWriter(save_path) as file_writer:
         print(save_path)
         for i in tqdm(range(0,args.steps)):
-            t = label_it.next()
-            byte_stream = augment(t, serialise_traj)
+            buff.append(label_it.next()) # add another trajectory top the buff, then choose a random one (so that this dataset and the original one are not totally aligned)
+            byte_stream = augment(random.choice(buff), serialise_traj)
             file_writer.write(byte_stream)
             
 from lfp.data import read_vid, serialise_vid
@@ -114,10 +117,12 @@ for path in VIDEO_DATA_PATHS:
     contrastive_it = iter(contrastive_dl.extract([path]).repeat())
     from tqdm import tqdm
     save_path = str(path/'tf_records')+f"/labelled_augmented.tfrecords"
+
+    buff = [contrastive_it.next() for i in range(0,100)]
     with tf.io.TFRecordWriter(save_path) as file_writer:
         print(save_path)
         for i in tqdm(range(0,args.steps)):
-            t = contrastive_it.next()
-            byte_stream = augment(t, serialise_vid)
+            buff.append(contrastive_it.next())
+            byte_stream = augment(random.choice(buff), serialise_vid)
             file_writer.write(byte_stream)
 
