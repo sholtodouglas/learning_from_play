@@ -92,41 +92,26 @@ def augment(t, serialise):
 
 
 from lfp.data import read_traj_tfrecord, serialise_traj
-from tqdm import tqdm
-    
-labelled_dl = lfp.data.labelled_dl(batch_size=1, include_images = True)
-    
-for path in TRAIN_DATA_PATHS:
-    label_it = iter(labelled_dl.extract([path]).repeat())
-
-
-    buff = [label_it.next() for i in range(0,100)]
-
-    save_path = str(path/'tf_records')+f"/labelled_augmented.tfrecords"
-    with tf.io.TFRecordWriter(save_path) as file_writer:
-        print(save_path)
-        for i in tqdm(range(0,args.steps)):
-            buff.append(label_it.next()) # add another trajectory top the buff, then choose a random one (so that this dataset and the original one are not totally aligned)
-            choice = random.choice(buff)
-            buff.remove(choice)
-            byte_stream = augment(choice, serialise_traj)
-            file_writer.write(byte_stream)
-            
+from tqdm import tqdm      
 from lfp.data import read_vid, serialise_vid
 
-contrastive_dl = lfp.data.labelled_dl(batch_size=1, read_func = read_vid)
-for path in VIDEO_DATA_PATHS:
-    contrastive_it = iter(contrastive_dl.extract([path]).repeat())
-    from tqdm import tqdm
-    save_path = str(path/'tf_records')+f"/labelled_augmented.tfrecords"
+def create_ds(PATHS, read, write):
+    labelled_dl = lfp.data.labelled_dl(batch_size=1, read_func=read)
+    for path in PATHS:
+        label_it = iter(labelled_dl.extract([path]).repeat())
+        buff = { i:label_it.next() for i in range(0,100)} # implement this as a dict, so we can randomly choose an element, then replace that - i.e like a tf shuffle buffer
+        save_path = str(path/'tf_records')+f"/labelled_augmented.tfrecords"
+        with tf.io.TFRecordWriter(save_path) as file_writer:
+            print(save_path)
+            for i in tqdm(range(0,args.steps)):
+                
+                choice = random.randint(0, len(buff))
+                
+                byte_stream = augment(buff[choice], write)
+                file_writer.write(byte_stream)
+                buff[choice] = label_it.next() # replace the one we used with a new random one, use dict not list as o(1) insertion /deletion
 
-    buff = [contrastive_it.next() for i in range(0,100)]
-    with tf.io.TFRecordWriter(save_path) as file_writer:
-        print(save_path)
-        for i in tqdm(range(0,args.steps)):
-            buff.append(contrastive_it.next())
-            choice = random.choice(buff)
-            buff.remove(choice)
-            byte_stream = augment(choice, serialise_vid)
-            file_writer.write(byte_stream)
 
+create_ds(TRAIN_DATA_PATHS, read_traj_tfrecord, serialise_traj)
+
+create_ds(VIDEO_DATA_PATHS, read_vid, serialise_vid)
