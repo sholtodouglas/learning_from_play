@@ -105,7 +105,7 @@ def create_ds(PATHS, read, write):
             print(save_path)
             for i in tqdm(range(0,args.steps)):
                 
-                choice = random.randint(0, len(buff))
+                choice = random.randint(0, len(buff)-1)
                 
                 byte_stream = augment(buff[choice], write)
                 file_writer.write(byte_stream)
