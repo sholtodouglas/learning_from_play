@@ -107,7 +107,9 @@ for path in TRAIN_DATA_PATHS:
         print(save_path)
         for i in tqdm(range(0,args.steps)):
             buff.append(label_it.next()) # add another trajectory top the buff, then choose a random one (so that this dataset and the original one are not totally aligned)
-            byte_stream = augment(random.choice(buff), serialise_traj)
+            choice = random.choice(buff)
+            buff.remove(choice)
+            byte_stream = augment(choice, serialise_traj)
             file_writer.write(byte_stream)
             
 from lfp.data import read_vid, serialise_vid
@@ -123,6 +125,8 @@ for path in VIDEO_DATA_PATHS:
         print(save_path)
         for i in tqdm(range(0,args.steps)):
             buff.append(contrastive_it.next())
-            byte_stream = augment(random.choice(buff), serialise_vid)
+            choice = random.choice(buff)
+            buff.remove(choice)
+            byte_stream = augment(choice, serialise_vid)
             file_writer.write(byte_stream)
 
