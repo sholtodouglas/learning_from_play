@@ -206,9 +206,10 @@ def get_latent_vectors(unlabelled_batch, labelled_batch, trainer, args):
             start, stop = indices[i], indices[i+1]
             minibatch = {k : v[start:stop] for k,v in batch.items()}
             if batch_type =='unlabelled' or not args.use_language: # if we're not using language goals, then just pass the labelled batch through the unlablled path
-                _,_, encoding, plan, batch_indices, sentence_embeddings = trainer.step(minibatch)
+                enc_policy, plan_policy, encoding, plan, batch_indices, actions, masks, seq_lens, sentence_embeddings = trainer.step(minibatch)
+                
             elif batch_type == 'labelled':
-                _,_, encoding, plan, batch_indices, sentence_embeddings = trainer.step(lang_labelled_inputs=minibatch)
+                enc_policy, plan_policy, encoding, plan, batch_indices, actions, masks, seq_lens, sentence_embeddings = trainer.step(lang_labelled_inputs=minibatch)
             encodings.append(encoding.sample()), plans.append(plan.sample())
         return np.vstack(encodings), np.vstack(plans)
 

@@ -307,3 +307,7 @@ debug \
 --standard_split 4 \
 --lang_split 2 \
 --bulk_split 2
+
+
+
+python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --bucket_name lfp_europe_west4_a --video_datasets Unity/contrastive_vids

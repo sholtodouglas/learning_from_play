@@ -87,7 +87,7 @@ def augment(t, serialise):
     t['tag'] = t['tags']
     t['label'] = subout(t['labels'])
     print(t['label'])
-    t['label_embedding'] = embed([t['label']])
+    t['label_embedding'] = tf.squeeze(embed([t['label']]))
     return serialise(t)
 
 

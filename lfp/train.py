@@ -258,7 +258,7 @@ class LFPTrainer():
         # 1. When using imagesChange the definition of obs_dim to feature encoder dim + proprioceptive features
         # 2. Reshape imgs to B*T H W C.
         # 3. Sub in for states and goals.
-        # 4. THen there should be no further changes!
+        # 4. Then there should be no further changes!
         if self.args.images:
             
             if inputs is not None:
@@ -266,8 +266,7 @@ class LFPTrainer():
                 imgs, proprioceptive_features, goal_imgs, = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
             
             # Frankly only care about these in the context of images
-            
-            if self.args.use_language:
+            if self.args.use_language and lang_labelled_inputs is not None:
 
                 indices['labelled'] = indices['unlabelled'] + len(lang_labelled_inputs['acts'])
                 if inputs is None:
@@ -285,7 +284,7 @@ class LFPTrainer():
 
                 
                 # contrastive only makes sense in the language context
-                if self.args.use_contrastive:
+                if self.args.use_contrastive and external_videos is not None:
                     indices['vids'] =  indices['labelled'] + len(external_videos['imgs'])
                      # B_i +Bll, T, H, W, C
                     imgs, goal_imgs, masks = tf.concat([imgs, external_videos['imgs']], 0), tf.concat([goal_imgs, external_videos['goal_imgs']], 0), tf.concat([masks, external_videos['masks']], 0)  # don't need seq lens from these as it is only used on action level loss
@@ -309,7 +308,7 @@ class LFPTrainer():
             # as we don't have amy sentence labels here, just take all img embeddings
             unlabelled_goal_embeddings = img_in_goal_space[:indices['unlabelled']]
             # we want some images, some sentence embeddings
-            if self.args.use_language:
+            if self.args.use_language and lang_labelled_inputs is not None:
                 # 0 ..[unlabelled data].......... unlablled ...[image fraction of lang labelled data].... image_fraction .......[lang labelled data].......labelled .................[video data].....................vids
                 image_fraction = int(indices['unlabelled'] + ((indices['labelled']-indices['unlabelled']) * self.args.sub_out_language_percent))
                 lang_use_img_embeddings = img_in_goal_space[indices['unlabelled']:image_fraction]
@@ -337,7 +336,7 @@ class LFPTrainer():
             if self.args.gripper_images:
                 if inputs is not None:
                     gripper_imgs = inputs['gripper_imgs']
-                if self.args.use_language:
+                if self.args.use_language and lang_labelled_inputs is not None:
                     if inputs is None: # Get rid of this if else hell later TODO
                         gripper_imgs = lang_labelled_inputs['gripper_imgs']
                     else:
@@ -384,6 +383,9 @@ class LFPTrainer():
                 # Additionally, for contrastive loss we need to get the encodings of the lang labelled and vids only, and their sentence embeddings
                 # Then maybe randomly offset by one - layout vid lab vid, or lab vid lab? Then take positive pairs/negative pairs via distance. Ez!
             # Plot just needs the first four...? Meh it can do that itself.
+            # In the event that we did contrastive, we get out encodings which will be [b_lab + b_lab + b_vid, D] and the plans which will chase them. 
+            # We'll also get indices, unlab, lab, vid
+            # therefore, to do contrastive all we need to do is chop off the first B_unlab worth, then the encodings and the sentrence embeddings will be the same length
 
 
     def train_step(self, **kwargs):
