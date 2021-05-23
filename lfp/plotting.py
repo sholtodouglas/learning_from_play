@@ -70,6 +70,7 @@ bucket_colors = {
  'block in/out cupboard':[0.8, 0.4, 1.0], #brighter purple #ff66ff
  'block': [0, 0.7, 1.0], # #00BFFF eveertything from here down is shades of blue
  'block + shelf': [0.05, 0.2, 0.7],
+ 'multi_object': [0,0,0],
 }
 
 hold_out = ['dial', 'block in/out drawer'] # block in out drawer is very similar to pick place

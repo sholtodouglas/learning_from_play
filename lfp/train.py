@@ -331,6 +331,7 @@ class LFPTrainer():
             # B, T, D
             goals = tf.tile(goals[:,tf.newaxis,:], [1, self.args.window_size_max, 1])
             # And mask it
+            print(goals.shape, masks.shape)
             goals = goals * masks[:, :, tf.newaxis] # B, T, 1 (for broadcasting)
 
             if self.args.gripper_images:
