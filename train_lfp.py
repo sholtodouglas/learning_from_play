@@ -194,7 +194,7 @@ else:
 from tensorflow.keras.utils import Progbar
 progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20 
-save_inc = 2000
+save_inc = 5000
 
 
 run_name = args.run_name
