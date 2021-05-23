@@ -566,7 +566,7 @@ class distributed_data_coordinator:
         self.valid_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
         
         ######################################### Plotting
-        self.plotting_background_dataset = iter(valid_dataset) #for the background in the cluster fig
+        self.plotting_background_dataset = iter(self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=args.batch_size)) #for the background in the cluster fig
         # For use with lang and plotting the colored dots
         tagged_dl = labelled_dl(label_type='tag', sim = args.sim)
         self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
