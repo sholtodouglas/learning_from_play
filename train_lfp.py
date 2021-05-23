@@ -259,7 +259,7 @@ while t < args.train_steps:
 
         # if not args.images:
             # How we plot the cluster figs
-        batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,2)]
+        batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,1)]
         super_batch = {}
         for k in batches[0].keys():
             super_batch[k] = np.concatenate([b[k] for b in batches])
