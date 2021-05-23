@@ -257,23 +257,23 @@ while t < args.train_steps:
     if (t+0) % save_inc == 0: # zero while we test this
         trainer.save_weights(model_path, run_id=wandb.run.id, experiment_key=experiment.get_key())
 
-        if not args.images:
+        # if not args.images:
             # How we plot the cluster figs
-            batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,2)]
-            super_batch = {}
-            for k in batches[0].keys():
-                super_batch[k] = np.concatenate([b[k] for b in batches])
-            lang_batch = dataset_coordinator.labelled_test_ds.next()
-            fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
-            #if not args.gcbc and not args.images:
-            #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+        batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,2)]
+        super_batch = {}
+        for k in batches[0].keys():
+            super_batch[k] = np.concatenate([b[k] for b in batches])
+        lang_batch = dataset_coordinator.labelled_test_ds.next()
+        fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
+        #if not args.gcbc and not args.images:
+        #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
-            #   #Comet
-            #   experiment.log_figure('z_enc', z_enc, step=t)
-            #   experiment.log_figure('z_plan', z_plan,step=t)
+        #   #Comet
+        #   experiment.log_figure('z_enc', z_enc, step=t)
+        #   experiment.log_figure('z_plan', z_plan,step=t)
 
-            # WandB
-            wandb.log({'z_enc':fig_enc, 'z_plan':fig_plan}, step=t)
+        # WandB
+        wandb.log({'z_enc':fig_enc, 'z_plan':fig_plan}, step=t)
 
           #latent_fig = project_enc_and_plan(ze, zp)
           #latent_img = plot_to_image(latent_fig)
