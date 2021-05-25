@@ -226,6 +226,44 @@ def compute_mmd(x, y):
 #   Dense(embedding_size),  
 # ], name = 'feature_encoder')
 
+# # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
+# class cnn(tf.keras.Model):
+#     # TODO: Make height width dependent
+#     def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64):
+#         super(cnn, self).__init__()
+#         self.img_height = img_height
+#         self.img_width = img_width
+#         self.img_channels = img_channels
+#         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
+#         self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu', name='c1')
+#         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
+#         self.conv3 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c3')
+#         self.conv4 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c4')
+#         # In between these, do a spatial softmax
+#         self.flatten = Flatten()
+#         self.dense1 = Dense(512, activation='relu')
+#         self.dense2 = Dense(embedding_size)
+        
+#     def call(self, inputs):
+#         x = self.rescaling(inputs)
+#         x = self.conv1(x)
+#         x = self.conv2(x)
+#         x = self.conv3(x)
+#         pre_softmax = self.conv4(x)
+        
+#         # Assume features is of size [N, H, W, C] (batch_size, height, width, channels).
+#         # Transpose it to [N, C, H, W], then reshape to [N * C, H * W] to compute softmax
+#         # jointly over the image dimensions. 
+#         N, H, W, C = pre_softmax.shape
+#         pre_softmax = tf.reshape(tf.transpose(pre_softmax, [0, 3, 1, 2]), [N * C, H * W])
+#         softmax = tf.nn.softmax(pre_softmax)
+#         # Reshape and transpose back to original format.
+#         softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1])
+#         x = self.flatten(softmax)
+#         x = self.dense1(x)
+#         return self.dense2(x)
+    
+
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
@@ -235,13 +273,14 @@ class cnn(tf.keras.Model):
         self.img_width = img_width
         self.img_channels = img_channels
         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
-        self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu', name='c1')
+        self.conv1 = Conv2D(32, 4, strides=(2,2), padding='same', activation='relu', name='c1')
         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
         self.conv3 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c3')
-        self.conv4 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c4')
+        self.conv3 = Conv2D(64, 3, strides=(2,2), padding='same', activation='relu', name='c3')
+        self.conv4 = Conv2D(128, 3, strides=(1,1), padding='same', activation='relu', name='c4')
         # In between these, do a spatial softmax
         self.flatten = Flatten()
-        self.dense1 = Dense(512, activation='relu')
+        self.dense1 = Dense(256, activation='relu')
         self.dense2 = Dense(embedding_size)
         
     def call(self, inputs):
@@ -262,4 +301,3 @@ class cnn(tf.keras.Model):
         x = self.flatten(softmax)
         x = self.dense1(x)
         return self.dense2(x)
-    
