@@ -19,7 +19,7 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp5
+export TPU_NAME=lfp2
 export BUCKET_NAME=lfp_europe_west4_a
 
 # Creating TPU + VM
@@ -252,14 +252,14 @@ https://stackoverflow.com/questions/60578801/how-to-load-tf-hub-model-from-local
 
 
 python3 train_lfp.py \
-IMB002_lang_enc_obs \
+IMB002_lang_full_enc \
 --bulk_datasets unity/envHz25 \
 --train_datasets unity/diverse \
 --test_datasets unity/diverse_test \
 -tfr \
 -s GCS \
 -d TPU \
--b 64 \
+-b 32 \
 -la 2048 \
 -le 512 \
 -lp 2048 \
@@ -275,9 +275,10 @@ IMB002_lang_enc_obs \
 -lang \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 48 \
+--standard_split 16 \
 --lang_split 8 \
---bulk_split 8
+--bulk_split 8 \
+-enc_all
 
 
 python3 train_lfp.py \
@@ -311,3 +312,38 @@ debug \
 
 
 python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --bucket_name lfp_europe_west4_a --video_datasets Unity/contrastive_vids
+
+
+
+python3 train_lfp.py \
+IMB002_lang_full_enc_v2 \
+--bulk_datasets unity/envHz25 \
+--train_datasets unity/diverse \
+--test_datasets unity/diverse_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.02 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8 \
+-enc_all \
+--init_from IMB002_lang_full_enc
+
+
+python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25 --train_datasets unity/diverse --test_datasets unity/diverse_test -tfr -s GCS -d TPU -b 32 -la 2048 -le 512 -lp 2048 -z 256 -lr 3e-4 -B 0.02 -n 5 -t 1000000 -wmin 25 -wmax 50 -i -gi -lang --bucket_name=$BUCKET_NAME --tpu_name=$TPU_NAME --standard_split 16 --lang_split 8 --bulk_split 8 -enc_all --init_from IMB002_lang_full_enc_bigCNN
