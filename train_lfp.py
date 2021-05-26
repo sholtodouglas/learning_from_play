@@ -201,6 +201,9 @@ run_name = args.run_name
 model_path = str(STORAGE_PATH/'saved_models'/args.run_name)
 
 if args.init_from != "":
+    inputs = dataset_coordinator.next()
+    inputs['beta'] = args.beta
+    trainer.distributed_train_step(inputs)
     print(f"Initing from: {args.init_from}")
     trainer.load_weights(str(STORAGE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
 
@@ -254,7 +257,7 @@ while t < args.train_steps:
                                 ('Validation Loss', metrics['valid_loss']),
                                 ('Time (s)', step_time)])
         #Plot on Comet
-        experiment.log_metrics(metrics,step=t)
+        #experiment.log_metrics(metrics,step=t)
         # Plot on WandB
         wandb.log(metrics, step=t)
 
