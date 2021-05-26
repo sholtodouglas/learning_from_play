@@ -60,7 +60,7 @@ parser.add_argument('-ss', '--standard_split', type=int, default=0)
 parser.add_argument('-bs', '--bulk_split', type=int, default=0)
 parser.add_argument('-ls', '--lang_split', type=int, default=0)
 parser.add_argument('-vs', '--video_split', type=int, default=0)
-
+parser.add_argument('--init_from', type=str, default="")
 args = parser.parse_args()
 
 # Argument validation
@@ -199,6 +199,10 @@ save_inc = 5000
 
 run_name = args.run_name
 model_path = str(STORAGE_PATH/'saved_models'/args.run_name)
+
+if args.init_from != "":
+    print(f"Initing from: {args.init_from}")
+    trainer.load_weights(str(STORAGE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
 
 if args.resume:
   # WandB reinit
