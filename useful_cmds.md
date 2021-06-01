@@ -317,8 +317,8 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 python3 train_lfp.py \
 IMB002_lang_full_enc_v2 \
---bulk_datasets unity/envHz25 \
---train_datasets unity/diverse \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new\
 --test_datasets unity/diverse_test \
 -tfr \
 -s GCS \

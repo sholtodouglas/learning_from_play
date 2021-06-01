@@ -52,7 +52,7 @@ def act_to_jointPositionsROSmsg(j: np.ndarray):
     return JointPositions(j[0], j[1], j[2], j[3], j[4], j[5], j[6], time.time())
 
 
-def ras_to_vector(o: ResetAngles):
+def ras_to_vector(o):  #ResetAngles - type check will fail without a ros install, and we don't need it if only training
     return np.array([o.shoulder, o.upper_arm, o.forearm, o.wrist_1, o.wrist_2, o.wrist_3, o.outer_knuckle_left, o.inner_finger_left,\
                      o.inner_knuckle_left, o.outer_knuckle_right, o.inner_finger_right, o.inner_knuckle_right])
 
