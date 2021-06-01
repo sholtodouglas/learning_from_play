@@ -267,7 +267,7 @@ def compute_mmd(x, y):
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
-    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, conv_dim_at_ss=32):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64):
         super(cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width
@@ -283,11 +283,7 @@ class cnn(tf.keras.Model):
         self.dense1 = Dense(256, activation='relu')
         self.dense2 = Dense(embedding_size)
 
-        x, y = tf.range(0, conv_dim_at_ss)/conv_dim_at_ss, tf.range(0, conv_dim_at_ss)/conv_dim_at_ss # so that feature locations are on a 0-1 scale not 0-128
-        X,Y = tf.meshgrid(x,y)
-        # Image coords is a tensor of size [H,W,2] representing the image coordinates of each pixel
-        image_coords = tf.cast(tf.stack([X,Y],-1), tf.float32)
-        self.image_coords= tf.expand_dims(image_coords, 2) 
+         
         
     def call(self, inputs):
         x = self.rescaling(inputs)
@@ -307,9 +303,14 @@ class cnn(tf.keras.Model):
 
         # Expand dims by 1
         softmax  = tf.expand_dims(softmax, -1)
+
+        x, y = tf.range(0, W)/W, tf.range(0, H)/H # so that feature locations are on a 0-1 scale not 0-128
+        X,Y = tf.meshgrid(x,y)
+        # Image coords is a tensor of size [H,W,2] representing the image coordinates of each pixel
+        image_coords = tf.cast(tf.stack([X,Y],-1), tf.float32)
+        image_coords= tf.expand_dims(image_coords, 2)
         # multiply to get feature locations
-        # IF you get an error likely image / CNN dims have changed and 'conv_dim_at_ss' is different")
-        spatial_soft_argmax = tf.reduce_sum(softmax * self.image_coords, axis=[1,2])
+        spatial_soft_argmax = tf.reduce_sum(softmax * image_coords, axis=[1,2])
             
         x = self.flatten(spatial_soft_argmax)
         x = self.dense1(x)
