@@ -267,7 +267,7 @@ def compute_mmd(x, y):
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
-    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, conv_dim_at_ss=32):
         super(cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width
@@ -276,14 +276,14 @@ class cnn(tf.keras.Model):
         self.conv1 = Conv2D(32, 4, strides=(2,2), padding='same', activation='relu', name='c1')
         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
         self.conv3 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c3')
-        self.conv3 = Conv2D(64, 3, strides=(2,2), padding='same', activation='relu', name='c3')
+        self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c3')
         self.conv4 = Conv2D(128, 3, strides=(1,1), padding='same', activation='relu', name='c4')
         # In between these, do a spatial softmax
         self.flatten = Flatten()
         self.dense1 = Dense(256, activation='relu')
         self.dense2 = Dense(embedding_size)
 
-        x, y = tf.range(0, img_width)/img_width, tf.range(0, img_width)/img_width # so that feature locations are on a 0-1 scale not 0-128
+        x, y = tf.range(0, conv_dim_at_ss)/conv_dim_at_ss, tf.range(0, conv_dim_at_ss)/conv_dim_at_ss # so that feature locations are on a 0-1 scale not 0-128
         X,Y = tf.meshgrid(x,y)
         # Image coords is a tensor of size [H,W,2] representing the image coordinates of each pixel
         image_coords = tf.cast(tf.stack([X,Y],-1), tf.float32)
@@ -308,8 +308,9 @@ class cnn(tf.keras.Model):
         # Expand dims by 1
         softmax  = tf.expand_dims(softmax, -1)
         # multiply to get feature locations
+        # IF you get an error likely image / CNN dims have changed and 'conv_dim_at_ss' is different")
         spatial_soft_argmax = tf.reduce_sum(softmax * self.image_coords, axis=[1,2])
-        
+            
         x = self.flatten(spatial_soft_argmax)
         x = self.dense1(x)
         return self.dense2(x)

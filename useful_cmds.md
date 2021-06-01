@@ -316,9 +316,9 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 
 python3 train_lfp.py \
-IMB002_lang_full_enc_v2 \
+sft_IMB001_lang_full_enc_v2 \
 --bulk_datasets unity/envHz25 unity/augmented_diverse_new \
---train_datasets unity/diverse unity/diverse_new\
+--train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
 -tfr \
 -s GCS \
@@ -329,7 +329,7 @@ IMB002_lang_full_enc_v2 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.02 \
+-B 0.01 \
 -n 5 \
 -t 1000000 \
 -wmin 25 \
@@ -342,8 +342,7 @@ IMB002_lang_full_enc_v2 \
 --standard_split 16 \
 --lang_split 8 \
 --bulk_split 8 \
--enc_all \
---init_from IMB002_lang_full_enc
+-enc_all
 
 
 python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25 --train_datasets unity/diverse --test_datasets unity/diverse_test -tfr -s GCS -d TPU -b 32 -la 2048 -le 512 -lp 2048 -z 256 -lr 3e-4 -B 0.02 -n 5 -t 1000000 -wmin 25 -wmax 50 -i -gi -lang --bucket_name=$BUCKET_NAME --tpu_name=$TPU_NAME --standard_split 16 --lang_split 8 --bulk_split 8 -enc_all --init_from IMB002_lang_full_enc_bigCNN
