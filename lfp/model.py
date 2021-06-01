@@ -282,6 +282,12 @@ class cnn(tf.keras.Model):
         self.flatten = Flatten()
         self.dense1 = Dense(256, activation='relu')
         self.dense2 = Dense(embedding_size)
+
+        x, y = tf.range(0, img_width)/img_width, tf.range(0, img_width)/img_width # so that feature locations are on a 0-1 scale not 0-128
+        X,Y = tf.meshgrid(x,y)
+        # Image coords is a tensor of size [H,W,2] representing the image coordinates of each pixel
+        image_coords = tf.cast(tf.stack([X,Y],-1), tf.float32)
+        self.image_coords= tf.expand_dims(image_coords, 2) 
         
     def call(self, inputs):
         x = self.rescaling(inputs)
@@ -297,7 +303,13 @@ class cnn(tf.keras.Model):
         pre_softmax = tf.reshape(tf.transpose(pre_softmax, [0, 3, 1, 2]), [N * C, H * W])
         softmax = tf.nn.softmax(pre_softmax)
         # Reshape and transpose back to original format.
-        softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1])
-        x = self.flatten(softmax)
+        softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1]) # N, H, W, C
+
+        # Expand dims by 1
+        softmax  = tf.expand_dims(softmax, -1)
+        # multiply to get feature locations
+        spatial_soft_argmax = tf.reduce_sum(softmax * self.image_coords, axis=[1,2])
+        
+        x = self.flatten(spatial_soft_argmax)
         x = self.dense1(x)
         return self.dense2(x)

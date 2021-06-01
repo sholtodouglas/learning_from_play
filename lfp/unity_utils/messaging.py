@@ -1,7 +1,7 @@
 try:
     import rospy
     from sensor_msgs.msg import Image as ImageMsg
-    from robotics_demo.msg import JointPositions, Observation, AchievedGoal, PositionCommand, RPYProprioState, Velocities, ResetInfo, ToRecord, RPYState, Reengage,  QuaternionProprioState,  Goal, TimerBeat
+    from robotics_demo.msg import JointPositions, Observation, AchievedGoal, PositionCommand, RPYProprioState, Velocities, ResetInfo, ToRecord, RPYState, Reengage,  QuaternionProprioState, ResetAngles, Goal, TimerBeat
     from robotics_demo.srv import getIK, getIKResponse, getState, getStateResponse, getTime, getTimeResponse
     import time
     from PIL import Image, ImageOps
@@ -50,6 +50,15 @@ def ag_to_ROSmsg(o: np.ndarray):
 
 def act_to_jointPositionsROSmsg(j: np.ndarray):
     return JointPositions(j[0], j[1], j[2], j[3], j[4], j[5], j[6], time.time())
+
+
+def ras_to_vector(o: ResetAngles):
+    return np.array([o.shoulder, o.upper_arm, o.forearm, o.wrist_1, o.wrist_2, o.wrist_3, o.outer_knuckle_left, o.inner_finger_left,\
+                     o.inner_knuckle_left, o.outer_knuckle_right, o.inner_finger_right, o.inner_knuckle_right])
+
+def vector_to_ras(o: np.array):
+    return ResetAngles(o[0],o[1], o[2], o[3], o[4], o[5], o[6], o[7], o[8], o[9], o[10], o[11])
+
 
 def unstack(a, axis = 0):
     return [np.take(a, i, axis = axis) for i in range(a.shape[axis])]

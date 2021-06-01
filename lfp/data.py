@@ -12,6 +12,7 @@ pp = pprint.PrettyPrinter(indent=4)
 from io import BytesIO
 from tensorflow.python.lib.io import file_io
 import lfp.unity_utils as uu
+import random
 
 dimensions = {'Unity': {'obs': 19,
                         'obs_extra_info': uu.messaging.UNITY_MAX_OBS_SIZE,
@@ -181,6 +182,7 @@ class PlayDataloader():
             for p in paths:
                 records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
                 record_paths += [pth for pth in records if 'label' not in pth]
+            random.shuffle(record_paths) # to ensure good mixing of different time periods of data (important in the bulk dataset)
             dataset = extract_tfrecords(record_paths, self.include_imgs, self.include_gripper_imgs, self.sim, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
@@ -555,13 +557,13 @@ class distributed_data_coordinator:
         assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == self.GLOBAL_BATCH_SIZE
         if args.use_language: assert self.lang_split > 0
         
-        ########################################## Train
+        ######################################### Train
         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
         self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
         
-        ########################################## Test
+        ######################################### Test
         valid_dataset = self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split+self.standard_split)
         self.valid_dataset = iter(strategy.experimental_distribute_dataset(valid_dataset))
         
@@ -571,9 +573,9 @@ class distributed_data_coordinator:
         tagged_dl = labelled_dl(label_type='tag', sim = args.sim)
         self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
 
-        ######################################### Languagee
+        ######################################### Language
         if args.use_language:
-            self.lang_dataset =  iter(strategy.experimental_distribute_dataset(self.dl_lang.load(self.dl_lang.extract(TRAIN_DATA_PATHS),  batch_size=self.lang_split)))
+            self.lang_dataset =  iter(strategy.experimental_distribute_dataset(self.dl_lang.load(self.dl_lang.extract(TRAIN_DATA_PATHS+BULK_DATA_PATHS),  batch_size=self.lang_split)))
             self.lang_valid_dataset =  iter(strategy.experimental_distribute_dataset(self.dl_lang.load(self.dl_lang.extract(TEST_DATA_PATHS),  batch_size=self.lang_split)))
         else:
             train_dist_lang_dataset, valid_dist_lang_dataset = None, None
