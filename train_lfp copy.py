@@ -68,20 +68,6 @@ if args.device == 'TPU' and args.data_source == 'GCS':
     if args.bucket_name is None or args.tpu_name is None:
         parser.error('When using GCP TPUs you must specify the bucket and TPU names')
 
-# python3 notebooks/train_lfp.py \
-# tpuv3-test \
-# --train_dataset UR5 UR5_slow_gripper UR5_high_transition \
-# --test_dataset UR5_slow_gripper_test \
-# -tfr \
-# -s GCS \
-# -d TPU \
-# -b 512 \
-# -la 2048 \
-# -le 512 \
-# -lp 2048 \
-# -z 256 \
-# -lr 1e-3
-
 print(args)
 
 from pathlib import Path
@@ -99,51 +85,10 @@ pp = pprint.PrettyPrinter(indent=4)
 
 #@title Workpace Setup (Local vs Colab)
 
-# Set up working directory and libraries
-if args.colab:
-    from google.colab import drive, auth
-    print('Using colab setup')
-    WORKING_PATH = Path('/content/learning_from_play')
-    # Clone repo
-    try:
-        get_ipython().system("git clone 'https://github.com/sholtodouglas/learning_from_play' {WORKING_PATH}")
-    except: 
-        pass
-    # Mount drive
-    drive.mount('/content/drive')
-else:
-    print('Using local setup')
-    WORKING_PATH = Path.cwd()
-    print(f'Working path: {WORKING_PATH}')
+print('Using local setup')
+WORKING_PATH = Path.cwd()
+print(f'Working path: {WORKING_PATH}')
 
-# Change working directory to learning_from_play
-os.chdir(WORKING_PATH)
-import lfp
-
-# Set up storage directory and datasets
-if args.data_source == 'GCS':
-    if args.colab:
-      auth.authenticate_user()
-    print('Reading data from Google Cloud Storage')
-    r = requests.get('https://ipinfo.io')
-    region = r.json()['region']
-    project_id = 'learning-from-play-303306'
-    logging.warning(f'You are accessing GCS data from {region}, make sure this is the same as your bucket {args.bucket_name}')
-    STORAGE_PATH = Pathy(f'gs://{args.bucket_name}')
-else:
-    print('Reading data from local filesystem')
-    STORAGE_PATH = WORKING_PATH
-
-
-SAVE_PATH = Pathy(f'gs://{args.bucket_name}')
-
-
-print(f'Storage path: {STORAGE_PATH}')
-TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
-TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
-BULK_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.bulk_datasets] if args.bulk_datasets != None else []
-VIDEO_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.video_datasets] if args.video_datasets != None else []
-# # Data Creation
 
 print("Tensorflow version " + tf.__version__)
 
