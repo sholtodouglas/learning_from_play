@@ -363,7 +363,7 @@ class impala_cnn(tf.keras.Model):
         x = self.flatten(x)
         x = self.dense1(x)
         x = self.dense2(x)
-        return x, _ # for compat with spatial softmax returns
+        return x, 0 # for compat with spatial softmax returns
 
 
 class deep_impala_cnn(tf.keras.Model):
@@ -406,6 +406,6 @@ class deep_impala_cnn(tf.keras.Model):
         x = self.flatten(x)
         x = self.dense1(x)
         x = self.dense2(x)
-        return x, _ # for compat with spatial softmax returns
+        return x, 0 # for compat with spatial softmax returns
 
 CNN_DICT= {'spatial_softmax': spatial_softmax_cnn, 'impala': impala_cnn, 'deep_impala': deep_impala_cnn}
