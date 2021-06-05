@@ -200,7 +200,7 @@ if args.init_from != "":
     inputs['beta'] = args.beta
     trainer.distributed_train_step(inputs)
     print(f"Initing from: {args.init_from}")
-    trainer.load_weights(str(STORAGE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
+    trainer.load_weights(str(SAVE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
 
 if args.resume:
   # WandB reinit
