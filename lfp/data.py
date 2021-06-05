@@ -393,7 +393,7 @@ def load_traj_tf_records(filenames, read_func, ordered=False):
     if not ordered:
         ignore_order.experimental_deterministic = False # disable order, increase speed
 
-    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=4) # 
+    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=tf.data.experimental.AUTOTUNE) # 
     dataset = dataset.with_options(ignore_order) # uses data as soon as it streams in, rather than in its original order
     dataset = dataset.map(read_func, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset

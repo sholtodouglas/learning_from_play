@@ -19,8 +19,22 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp2
+export TPU_NAME=lfp1
 export BUCKET_NAME=lfp_europe_west4_a
+export PROJECT_ID=learning-from-play-303306
+
+
+# Creating just a TPU-VM (new method)
+
+gcloud alpha compute tpus tpu-vm create $TPU_NAME \
+  --zone=$TPU_ZONE\
+  --accelerator-type=$TPU_SIZE \
+  --version=v2-alpha
+
+gcloud alpha compute tpus create $TPU_NAME \
+  --zone=$TPU_ZONE\
+  --accelerator-type=$TPU_SIZE \
+  --version=v2-alpha
 
 # Creating TPU + VM
 
@@ -66,7 +80,7 @@ cd learning_from_play
 
 
 export BUCKET_NAME=lfp_europe_west4_a
-export TPU_NAME=lfp2
+export TPU_NAME=lfp1
 # Run the sample training script for GCS setup
 
 ```
@@ -316,7 +330,7 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 
 python3 train_lfp.py \
-sft_IMB001_lang_full_enc_v2 \
+sft_IMB00_lang_lim_enc_v3 \
 --bulk_datasets unity/envHz25 unity/augmented_diverse_new \
 --train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
@@ -329,7 +343,7 @@ sft_IMB001_lang_full_enc_v2 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.01 \
+-B 0.0 \
 -n 5 \
 -t 1000000 \
 -wmin 25 \
@@ -341,8 +355,11 @@ sft_IMB001_lang_full_enc_v2 \
 --tpu_name=$TPU_NAME \
 --standard_split 16 \
 --lang_split 8 \
---bulk_split 8 \
--enc_all
+--bulk_split 8
+
+
+-enc_all \
+--init_from sft_IMB001_lang_full_enc_v2
 
 
 python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25 --train_datasets unity/diverse --test_datasets unity/diverse_test -tfr -s GCS -d TPU -b 32 -la 2048 -le 512 -lp 2048 -z 256 -lr 3e-4 -B 0.02 -n 5 -t 1000000 -wmin 25 -wmax 50 -i -gi -lang --bucket_name=$BUCKET_NAME --tpu_name=$TPU_NAME --standard_split 16 --lang_split 8 --bulk_split 8 -enc_all --init_from IMB002_lang_full_enc_bigCNN
