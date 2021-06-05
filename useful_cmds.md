@@ -81,6 +81,8 @@ git clone https://github.com/sholtodouglas/learning_from_play
 
 cd learning_from_play
 ./setup.sh
+mkdir data
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 ```
 gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 
