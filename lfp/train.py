@@ -531,25 +531,19 @@ class LFPTrainer():
 
     def save_weights(self, path, run_id=None, experiment_key=None):
 
-        if self.args.data_source == 'GCS':
-            if self.chkpt_manager is None:
-                ckpt = tf.train.Checkpoint(**self.get_saved_objects())
-                self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
-                save_path = self.chkpt_manager.save()
-            else:
-                save_path = self.chkpt_manager.save()
-        else: # We have to save it all to drive
-            raise NotImplementedError
+        if self.chkpt_manager is None:
+            ckpt = tf.train.Checkpoint(**self.get_saved_objects())
+            self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
+            save_path = self.chkpt_manager.save()
+        else:
+            save_path = self.chkpt_manager.save()
 
 
     def load_weights(self, path, with_optimizer=False, from_checkpoint=False):
         # With checkpoint
-        if from_checkpoint or self.data_source == 'GCS':
-            ckpt = tf.train.Checkpoint(**self.get_saved_objects())
-            self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
-            ckpt.restore(tf.train.latest_checkpoint(path))
-        else:
-            raise NotImplementedError # As only using GCS, removed DRIVE support.
+        ckpt = tf.train.Checkpoint(**self.get_saved_objects())
+        self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
+        ckpt.restore(tf.train.latest_checkpoint(path))
 
 def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
     
