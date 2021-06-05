@@ -1,13 +1,19 @@
 try:
     import rospy
     from sensor_msgs.msg import Image as ImageMsg
-    from robotics_demo.msg import JointPositions, Observation, AchievedGoal, PositionCommand, RPYProprioState, Velocities, ResetInfo, ToRecord, RPYState, Reengage,  QuaternionProprioState, ResetAngles, Goal, TimerBeat
+    from robotics_demo.msg import JointPositions, Observation, AchievedGoal, PositionCommand, RPYProprioState, Velocities, ResetInfo, ToRecord, RPYState, Reengage,  QuaternionProprioState, Goal, TimerBeat
     from robotics_demo.srv import getIK, getIKResponse, getState, getStateResponse, getTime, getTimeResponse
     import time
     from PIL import Image, ImageOps
     import pybullet
 except:
     print("Ros/Pybullet not found - no issue if just training")
+
+try:
+    from robotics_demo.msg import ResetAngles
+except:
+    pass
+    
 import numpy as np
 
 import time
