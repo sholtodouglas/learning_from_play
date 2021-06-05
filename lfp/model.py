@@ -362,7 +362,6 @@ class impala_cnn(tf.keras.Model):
         x = self.conv_3(x)
         r1 = self.res_3_1(x)
         x = self.res_3_2(r1) + x
-        print(x.shape)
 
         x = self.flatten(x)
         x = self.dense1(x)
