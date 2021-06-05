@@ -19,8 +19,23 @@ export TPU_SIZE=v2-8
 # Europe (v3-8)
 export TPU_ZONE=europe-west4-a
 export TPU_SIZE=v3-8
-export TPU_NAME=lfp2
+export TPU_NAME=lfp1
 export BUCKET_NAME=lfp_europe_west4_a
+export PROJECT_ID=learning-from-play-303306
+
+
+
+# Creating just a TPU-VM (new method)
+
+
+
+gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
+
+gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
+
+
+
+gcloud alpha compute tpus tpu-vm delete lfp1 --zone=europe-west4-a
 
 # Creating TPU + VM
 
@@ -57,16 +72,22 @@ See more info here: https://cloud.google.com/sdk/docs/quickstart
 # Use tmux so that the process keeps running after ssh disconnect
 
 # optionally clone the repo if not already there
+# libTPU breaks with a normal TF installation
 ```
+git clone https://github.com/tensorflow/models.git
+pip3 install -r models/official/requirements.txt
+
 git clone https://github.com/sholtodouglas/learning_from_play
 
 cd learning_from_play
 ./setup.sh
+mkdir data
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 ```
-
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 
 export BUCKET_NAME=lfp_europe_west4_a
-export TPU_NAME=lfp2
+export TPU_NAME=lfp1
 # Run the sample training script for GCS setup
 
 ```
@@ -95,153 +116,6 @@ To see which python processes are currently running use:
 ```ps -ef | grep python```
 
 
-
-python3 train_lfp.py \
-PROB_IM_BIGPLAN_B0_01 \
---train_dataset UR5 UR5_slow_gripper UR5_high_transition \
---test_dataset UR5_slow_gripper_test \
--tfr \
--s GCS \
--d TPU \
--b 32 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.01 \
--t 500000 \
--wmin 20 \
--wmax 40 \
--i \
--tfr \
--n 5 \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-
-python3 train_lfp.py \
-IM_BIGPLAN_B0_00003 \
---train_dataset UR5 UR5_slow_gripper UR5_high_transition \
---test_dataset UR5_slow_gripper_test \
--tfr \
--s GCS \
--d TPU \
--b 16 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.00003 \
--t 500000 \
--wmin 20 \
--wmax 40 \
--i \
--tfr \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-
---train_dataset Unity/envHz25 \
---test_dataset Unity/envHz25_test \
---train_dataset Unity/serv12Hz \
---test_dataset Unity/serv12Hz_test \
-
-python3 train_lfp.py \
-300kstatesB0_04 \
---train_dataset Unity/envHz25 \
---test_dataset Unity/envHz25_test \
--tfr \
--s GCS \
--d TPU \
--b 512 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.04 \
--n 5 \
--t 1000000 \
--wmin 20 \
--wmax 40 \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-python3 train_lfp.py \
-300kImB0_02 \
---train_dataset Unity/envHz25 \
---test_dataset Unity/envHz25_test \
--tfr \
--s GCS \
--d TPU \
--b 32 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.02 \
--n 5 \
--t 1000000 \
--wmin 20 \
--wmax 40 \
--i \
--gi \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-
-
-python3 train_lfp.py \
-PybulletB0_02_2040_lim \
---train_dataset UR5 \
---test_dataset UR5_slow_gripper_test \
--tfr \
--s GCS \
--d TPU \
--b 512 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.02 \
--n 5 \
--wmin 20 \
--wmax 40 \
--sim Pybullet \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-
-python3 train_lfp.py \
-UNITY_IM_B0_01 \
---train_dataset Unity/UR5_train \
---test_dataset Unity/UR5_test \
--tfr \
--s GCS \
--d TPU \
--b 16 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.01 \
--t 500000 \
--wmin 20 \
--wmax 40 \
--i \
--gi \
--tfr \
--n 5 \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME
-
-
-
 This the language model
 "https://tfhub.dev/google/universal-sentence-encoder/4"
 
@@ -250,35 +124,6 @@ https://stackoverflow.com/questions/60578801/how-to-load-tf-hub-model-from-local
 
 
 
-
-python3 train_lfp.py \
-IMB002_lang_full_enc \
---bulk_datasets unity/envHz25 \
---train_datasets unity/diverse \
---test_datasets unity/diverse_test \
--tfr \
--s GCS \
--d TPU \
--b 32 \
--la 2048 \
--le 512 \
--lp 2048 \
--z 256 \
--lr 3e-4 \
--B 0.02 \
--n 5 \
--t 1000000 \
--wmin 25 \
--wmax 50 \
--i \
--gi \
--lang \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME \
---standard_split 16 \
---lang_split 8 \
---bulk_split 8 \
--enc_all
 
 
 python3 train_lfp.py \
@@ -316,8 +161,8 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 
 python3 train_lfp.py \
-bigenc_IMB001_lang_lim_enc_v2 \
---bulk_datasets unity/envHz25 \
+sft_IMB00_lang_lim_enc_v3 \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
 --train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
 -tfr \
@@ -325,7 +170,43 @@ bigenc_IMB001_lang_lim_enc_v2 \
 -d TPU \
 -b 32 \
 -la 2048 \
--le 1024 \
+-le 512 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.0 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8
+
+
+-enc_all \
+--init_from sft_IMB001_lang_full_enc_v2
+
+
+python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25 --train_datasets unity/diverse --test_datasets unity/diverse_test -tfr -s GCS -d TPU -b 32 -la 2048 -le 512 -lp 2048 -z 256 -lr 3e-4 -B 0.02 -n 5 -t 1000000 -wmin 25 -wmax 50 -i -gi -lang --bucket_name=$BUCKET_NAME --tpu_name=$TPU_NAME --standard_split 16 --lang_split 8 --bulk_split 8 -enc_all --init_from IMB002_lang_full_enc_bigCNN
+
+
+python3 train_lfp.py \
+tputest \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new \
+--test_datasets unity/diverse_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
@@ -341,7 +222,4 @@ bigenc_IMB001_lang_lim_enc_v2 \
 --tpu_name=$TPU_NAME \
 --standard_split 20 \
 --lang_split 8 \
---bulk_split 4
-
-
-python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25 --train_datasets unity/diverse --test_datasets unity/diverse_test -tfr -s GCS -d TPU -b 32 -la 2048 -le 512 -lp 2048 -z 256 -lr 3e-4 -B 0.02 -n 5 -t 1000000 -wmin 25 -wmax 50 -i -gi -lang --bucket_name=$BUCKET_NAME --tpu_name=$TPU_NAME --standard_split 16 --lang_split 8 --bulk_split 8 -enc_all --init_from IMB002_lang_full_enc_bigCNN
+--bulk_split 8

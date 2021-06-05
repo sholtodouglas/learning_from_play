@@ -21,7 +21,7 @@ parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
 parser.add_argument('--bulk_datasets', nargs='+', help='data diversity dataset names')
 parser.add_argument('--video_datasets', nargs='+', help='for contrastive learning')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
-parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of training data')
+parser.add_argument('-s', '--data_source', default='GCS', help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
 parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=512, type=int)
@@ -121,11 +121,7 @@ os.chdir(WORKING_PATH)
 import lfp
 
 # Set up storage directory and datasets
-if args.data_source == 'DRIVE':
-    assert args.colab, "Must be using Colab"
-    print('Reading data from Google Drive')
-    STORAGE_PATH = Path('/content/drive/My Drive/Robotic Learning')
-elif args.data_source == 'GCS':
+if args.data_source == 'GCS':
     if args.colab:
       auth.authenticate_user()
     print('Reading data from Google Cloud Storage')
@@ -138,6 +134,10 @@ else:
     print('Reading data from local filesystem')
     STORAGE_PATH = WORKING_PATH
 
+
+SAVE_PATH = Pathy(f'gs://{args.bucket_name}')
+
+
 print(f'Storage path: {STORAGE_PATH}')
 TRAIN_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.train_datasets]
 TEST_DATA_PATHS = [STORAGE_PATH/'data'/x for x in args.test_datasets]
@@ -149,8 +149,9 @@ print("Tensorflow version " + tf.__version__)
 
 if args.device == 'TPU':
     try:
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args.tpu_name)  # TPU detection
-        print('Running on TPU ', tpu.cluster_spec().as_dict()['worker'])
+        # Forever changing to direct TPU access :D
+        tpu = lfp.utils.LocalTPUClusterResolver() #tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args.tpu_name)  # TPU detection
+        print('Running on TPU ', tpu.cluster_spec())
     except ValueError:
         raise BaseException('ERROR: Not connected to a TPU runtime; please see the previous cell in this notebook for instructions!')
 
@@ -172,14 +173,9 @@ else:
     print(physical_devices)
 
 # # Dataset
-
-     
 dataset_coordinator = lfp.data.distributed_data_coordinator(args, TRAIN_DATA_PATHS, TEST_DATA_PATHS, strategy, BULK_DATA_PATHS, VIDEO_DATA_PATHS, args.standard_split, args.bulk_split , args.lang_split, args.video_split, NUM_DEVICES) # non-teleop, video only data
 
 # # Model
-
-# # Training Loop
-
 from lfp.train import LFPTrainer
 
 
@@ -196,9 +192,8 @@ progbar = Progbar(args.train_steps, verbose=1, interval=0.5)
 valid_inc = 20 
 save_inc = 5000
 
-
-run_name = args.run_name
-model_path = str(STORAGE_PATH/'saved_models'/args.run_name)
+run_name = args.run_name # Could modify this to auto inc beta etc but that often ends up being non distinctive
+model_path = str(SAVE_PATH/'saved_models'/args.run_name)
 
 if args.init_from != "":
     inputs = dataset_coordinator.next()
@@ -211,15 +206,9 @@ if args.resume:
   # WandB reinit
   with open(f'{model_path}/config.json', 'r') as f:
       data = json.load(f)
-  # Comet ML reinit
-  exp = ExistingExperiment(api_key="C4vcCM57bnSYEsdncguxDW8pO",  previous_experiment=data['experiment_key'])
-
   wandb.init(project="learning-from-play_v2", id=data['run_id'],  resume="must")
-  t = wandb.run.step + valid_inc # Todo get this from comet to complete the transition
-
-  load_weights(model_path, actor, encoder, planner, with_optimizer=True)
+  t = wandb.run.step + valid_inc # 
   print('Loaded model weights and optimiser state')
-  
   progbar.add(t, []) # update the progbar to the most recent point
 else:
   #Comet
