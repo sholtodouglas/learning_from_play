@@ -578,10 +578,10 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
 
     cnn, gripper_cnn, img_embed_to_goal_space, lang_embed_to_goal_space = None, None, None, None
     if args.images:
-        cnn = lfp.model.cnn(dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
+        cnn = lfp.model.CNN_DICT[args.cnn_type](dl.img_size, dl.img_size, embedding_size=args.img_embedding_size)
         lfp.utils.build_cnn(cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
         if args.gripper_images:
-            gripper_cnn = lfp.model.cnn(dl.gripper_img_size, dl.gripper_img_size, embedding_size=args.gripper_img_embedding_size)
+            gripper_cnn = lfp.model.CNN_DICT[args.cnn_type](dl.gripper_img_size, dl.gripper_img_size, embedding_size=args.gripper_img_embedding_size)
             lfp.utils.build_cnn(gripper_cnn)  # Have to do this becasue it is subclassed and the reshapes in the spatial softmax don't play nice with model auto build
         img_embed_to_goal_space = lfp.model.create_goal_space_mapper(args.img_embedding_size, args.goal_space_dim, args.goal_mapper_layer_size)
         if args.use_language:

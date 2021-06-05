@@ -265,17 +265,20 @@ def compute_mmd(x, y):
     
 
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
-class cnn(tf.keras.Model):
+
+
+
+
+class spatial_softmax_cnn(tf.keras.Model):
     # TODO: Make height width dependent
     def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
-        super(cnn, self).__init__()
+        super(spatial_softmax_cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width
         self.img_channels = img_channels
         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
         self.conv1 = Conv2D(32, 4, strides=(2,2), padding='same', activation='relu', name='c1')
         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
-        self.conv3 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c3')
         self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c3')
         self.conv4 = Conv2D(128, 3, strides=(1,1), padding='same', activation='relu', name='c4')
         # In between these, do a spatial softmax
@@ -318,3 +321,91 @@ class cnn(tf.keras.Model):
         
         return self.dense2(x), spatial_soft_argmax
         
+
+class impala_cnn(tf.keras.Model):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
+        super(impala_cnn, self).__init__()
+        self.img_height = img_height
+        self.img_width = img_width
+        self.img_channels = img_channels
+        self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
+        self.conv1 = Conv2D(16, 3, strides=(2,2), padding='same', activation='relu', name='c1')
+        self.conv2 = Conv2D(32, 3, strides=(2,2), padding='same', activation='relu', name='c2')
+        self.conv3 = Conv2D(32, 3, strides=(2,2), padding='same', activation='relu', name='c3')
+        # In between these, do a spatial softmax
+        self.flatten = Flatten()
+        self.dense1 = Dense(256, activation='relu')
+        self.dense2 = Dense(embedding_size)
+        self.return_spatial_softmax = return_spatial_softmax
+
+         
+    def res_block(self, x, filters=32):
+        l1 = Conv2D(filters, 3, strides=(1,1), padding='same', activation='relu')(x)
+        l2 = Conv2D(filters, 3, strides=(1,1), padding='same', activation='relu')(l1) + x
+        return l2
+        
+        
+        
+    def call(self, inputs):
+        x = self.rescaling(inputs)
+        x = self.conv1(x)
+        x = self.res_block(x, 16)
+        x = self.res_block(x, 16)
+
+        x = self.conv2(x)
+        x = self.res_block(x, 32)
+        x = self.res_block(x, 32)
+
+        x = self.conv3(x)
+        x = self.res_block(x, 32)
+        x = self.res_block(x, 32)
+
+        x = self.flatten(x)
+        x = self.dense1(x)
+        x = self.dense2(x)
+        return x, _ # for compat with spatial softmax returns
+
+
+class deep_impala_cnn(tf.keras.Model):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
+        super(deep_impala_cnn, self).__init__()
+        self.img_height = img_height
+        self.img_width = img_width
+        self.img_channels = img_channels
+        self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
+        self.conv1 = Conv2D(32, 3, strides=(2,2), padding='same', activation='relu', name='c1')
+        self.conv2 = Conv2D(64, 3, strides=(2,2), padding='same', activation='relu', name='c2')
+        self.conv3 = Conv2D(128, 3, strides=(2,2), padding='same', activation='relu', name='c3')
+        # In between these, do a spatial softmax
+        self.flatten = Flatten()
+        self.dense1 = Dense(256, activation='relu')
+        self.dense2 = Dense(embedding_size)
+        self.return_spatial_softmax = return_spatial_softmax
+
+         
+    def res_block(self, x, filters=32):
+        l1 = Conv2D(filters, 3, strides=(1,1), padding='same', activation='relu')(x)
+        l2 = Conv2D(filters, 3, strides=(1,1), padding='same', activation='relu')(l1) + x
+        return l2
+        
+        
+    def call(self, inputs):
+        x = self.rescaling(inputs)
+        x = self.conv1(x)
+        x = self.res_block(x, 32)
+        x = self.res_block(x, 32)
+
+        x = self.conv2(x)
+        x = self.res_block(x, 64)
+        x = self.res_block(x, 64)
+
+        x = self.conv3(x)
+        x = self.res_block(x, 128)
+        x = self.res_block(x, 128)
+
+        x = self.flatten(x)
+        x = self.dense1(x)
+        x = self.dense2(x)
+        return x, _ # for compat with spatial softmax returns
+
+CNN_DICT= {'spatial_softmax': spatial_softmax_cnn, 'impala': impala_cnn, 'deep_impala': deep_impala_cnn}
