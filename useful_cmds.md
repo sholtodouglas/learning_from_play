@@ -197,7 +197,7 @@ python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25
 
 
 python3 train_lfp.py \
-sft_IMB00_lang_lim_enc_v3 \
+tputest \
 --bulk_datasets unity/envHz25 unity/augmented_diverse_new \
 --train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
@@ -206,11 +206,11 @@ sft_IMB00_lang_lim_enc_v3 \
 -d TPU \
 -b 32 \
 -la 2048 \
--le 512 \
+-le 2048 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.0 \
+-B 0.01 \
 -n 5 \
 -t 1000000 \
 -wmin 25 \
