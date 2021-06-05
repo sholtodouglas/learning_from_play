@@ -102,7 +102,7 @@ if args.device == 'TPU':
     print("Connect to cluster")
     # tf.config.experimental_connect_to_cluster(tpu)
     # print("Initialise")
-    # tf.tpu.experimental.initialize_tpu_system(tpu)
+    tf.tpu.experimental.initialize_tpu_system(tpu)
     print("Strat")
     strategy = tf.distribute.TPUStrategy(tpu)
     print("NUMDEV")
