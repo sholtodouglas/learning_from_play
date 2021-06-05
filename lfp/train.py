@@ -297,10 +297,10 @@ class LFPTrainer():
 
             B, T, H, W, C = imgs.shape
             imgs = tf.reshape(imgs, [B * T, H, W, C])
-            img_embeddings = tf.reshape(self.cnn(imgs), [B, T, -1]) # [B,T,D]
+            img_embeddings = tf.reshape(self.cnn(imgs)[0], [B, T, -1]) # [B,T,D]
             states = tf.concat([img_embeddings, proprioceptive_features], -1)  # gets both the image and it's own xyz ori and angle as pose
 
-            goal_img_embeddings = self.cnn(goal_imgs) # [B,D]
+            goal_img_embeddings = self.cnn(goal_imgs)[0] # [B,D]
             img_in_goal_space = self.img_embed_to_goal_space(goal_img_embeddings) # B, D
 
             # At this point, we have B_unlab+B_lab+B_vid goal image embeddings, and B_lab+B_vid sentence goal embeddings - all in the goal space!
@@ -343,7 +343,7 @@ class LFPTrainer():
 
                 B_grip, _, H_g, W_g, C = gripper_imgs.shape
                 gripper_imgs = tf.reshape(gripper_imgs, [B*T, H_g, W_g, C])
-                gripper_embeddings = tf.reshape(self.gripper_cnn(gripper_imgs), [B, T, -1]) # should be [B, T, args.gripper_img_embedding_size]
+                gripper_embeddings = tf.reshape(self.gripper_cnn(gripper_imgs)[0], [B, T, -1]) # should be [B, T, args.gripper_img_embedding_size]
                 states = tf.concat([states, gripper_embeddings], -1)
 
 

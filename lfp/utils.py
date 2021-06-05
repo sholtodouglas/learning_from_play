@@ -39,14 +39,14 @@ def images_to_2D_features(imgs, proprioceptive_features, goal_imgs, cnn):
     imgs, proprioceptive_features, goal_imgs = imgs, proprioceptive_features, goal_imgs
     B, T, H, W, C = imgs.shape
     imgs = tf.reshape(imgs, [B * T, H, W, C])
-    img_embeddings = tf.reshape(cnn(imgs), [B, T, -1])
+    img_embeddings = tf.reshape(cnn(imgs)[0], [B, T, -1])
     states = tf.concat([img_embeddings, proprioceptive_features],-1)  # gets both the image and it's own xyz ori and angle as pose
     if len(goal_imgs.shape) == 5:
         goal_imgs = tf.reshape(goal_imgs, [B * T, H, W, C])
-        goals = tf.reshape(cnn(goal_imgs), [B, T, -1])
+        goals = tf.reshape(cnn(goal_imgs)[0], [B, T, -1])
     else: # It came in without a time dimension as we are just sending it to the planner - as it does in the plotting code
         goal_imgs = tf.reshape(goal_imgs, [B, H, W, C])
-        goals = tf.reshape(cnn(goal_imgs), [B, -1])
+        goals = tf.reshape(cnn(goal_imgs)[0], [B, -1])
     return states, goals
 
 

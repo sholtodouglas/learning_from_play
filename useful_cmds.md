@@ -220,6 +220,6 @@ tputest \
 -lang \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 16 \
+--standard_split 20 \
 --lang_split 8 \
 --bulk_split 8

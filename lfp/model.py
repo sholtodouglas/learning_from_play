@@ -267,7 +267,7 @@ def compute_mmd(x, y):
 # Has a cheeky 10M params but ok. This is the option which uses spatial softmax. 
 class cnn(tf.keras.Model):
     # TODO: Make height width dependent
-    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64):
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
         super(cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width
@@ -282,6 +282,7 @@ class cnn(tf.keras.Model):
         self.flatten = Flatten()
         self.dense1 = Dense(256, activation='relu')
         self.dense2 = Dense(embedding_size)
+        self.return_spatial_softmax = return_spatial_softmax
 
          
         
@@ -314,4 +315,6 @@ class cnn(tf.keras.Model):
             
         x = self.flatten(spatial_soft_argmax)
         x = self.dense1(x)
-        return self.dense2(x)
+        
+        return self.dense2(x), spatial_soft_argmax
+        
