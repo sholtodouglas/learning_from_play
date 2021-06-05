@@ -33,7 +33,9 @@ gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator
 
 gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
 
-gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
+
+
+gcloud alpha compute tpus tpu-vm delete lfp1 --zone=europe-west4-a
 
 # Creating TPU + VM
 
@@ -70,13 +72,17 @@ See more info here: https://cloud.google.com/sdk/docs/quickstart
 # Use tmux so that the process keeps running after ssh disconnect
 
 # optionally clone the repo if not already there
+# libTPU breaks with a normal TF installation
 ```
+git clone https://github.com/tensorflow/models.git
+pip3 install -r models/official/requirements.txt
+
 git clone https://github.com/sholtodouglas/learning_from_play
 
 cd learning_from_play
 ./setup.sh
 ```
-
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 
 export BUCKET_NAME=lfp_europe_west4_a
 export TPU_NAME=lfp1
