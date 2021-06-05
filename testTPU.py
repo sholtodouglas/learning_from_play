@@ -100,9 +100,9 @@ if args.device == 'TPU':
         raise BaseException('ERROR: Not connected to a TPU runtime; please see the previous cell in this notebook for instructions!')
 
     print("Connect to cluster")
-    tf.config.experimental_connect_to_cluster(tpu)
-    print("Initialise")
-    tf.tpu.experimental.initialize_tpu_system(tpu)
+    # tf.config.experimental_connect_to_cluster(tpu)
+    # print("Initialise")
+    # tf.tpu.experimental.initialize_tpu_system(tpu)
     print("Strat")
     strategy = tf.distribute.TPUStrategy(tpu)
     print("NUMDEV")
