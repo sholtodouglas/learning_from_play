@@ -322,6 +322,73 @@ class spatial_softmax_cnn(tf.keras.Model):
         return self.dense2(x), spatial_soft_argmax
         
 
+class intensities_spatial_softmax_cnn(tf.keras.Model):
+    # TODO: Make height width dependent
+    def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
+        super(spatial_softmax_cnn, self).__init__()
+        self.img_height = img_height
+        self.img_width = img_width
+        self.img_channels = img_channels
+        self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
+        self.conv1 = Conv2D(32, 4, strides=(2,2), padding='same', activation='relu', name='c1')
+        self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
+        self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c3')
+        self.conv4 = Conv2D(128, 3, strides=(1,1), padding='same', activation='relu', name='c4')
+        # In between these, do a spatial softmax
+        self.flatten = Flatten()
+        self.dense1 = Dense(256, activation='relu')
+        self.dense2 = Dense(embedding_size)
+        self.return_spatial_softmax = return_spatial_softmax
+
+         
+        
+    def call(self, inputs):
+        x = self.rescaling(inputs)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        pre_softmax = self.conv4(x)
+        
+        # Assume features is of size [N, H, W, C] (batch_size, height, width, channels).
+        # Transpose it to [N, C, H, W], then reshape to [N * C, H * W] to compute softmax
+        # jointly over the image dimensions. 
+        N, H, W, C = pre_softmax.shape
+        pre_softmax = tf.reshape(tf.transpose(pre_softmax, [0, 3, 1, 2]), [N * C, H * W])
+        softmax = tf.nn.softmax(pre_softmax)
+        # Reshape and transpose back to original format.
+        softmax = tf.transpose(tf.reshape(softmax, [N, C, H, W]), [0, 2, 3, 1]) # N, H, W, C
+
+        # Expand dims by 1
+        softmax  = tf.expand_dims(softmax, -1)
+
+        x, y = tf.range(0, W)/W, tf.range(0, H)/H # so that feature locations are on a 0-1 scale not 0-128
+        X,Y = tf.meshgrid(x,y)
+        # Image coords is a tensor of size [H,W,2] representing the image coordinates of each pixel
+        image_coords = tf.cast(tf.stack([X,Y],-1), tf.float32)
+        image_coords= tf.expand_dims(image_coords, 2)
+        # multiply to get feature locations
+        spatial_soft_argmax = tf.reduce_sum(softmax * image_coords, axis=[1,2])
+
+        # Get indices corresponding to each
+        batch_indices =tf.reshape(tf.repeat(tf.range(0,N,1)[tf.newaxis,:], C), [N,C])[:,:,tf.newaxis] # 0,0,0, 1,1,1, etc as batch indices
+        keypoint_indices = tf.tile(tf.range(0,C,1)[tf.newaxis, :], [N,1])[:, :, tf.newaxis] # numbers 1,2,3... 1,2,3... keypoints, batches appropriately
+        assert W == H # this next step is currently only coded for squares
+        keypoint_img_indices = tf.reverse(tf.cast(spatial_soft_argmax * W, tf.int32), [-1]) # gather nd has opposite axes to images, x is y, y is x
+        gather_indices = tf.concat([batch_indices, keypoint_img_indices, keypoint_indices], axis = -1)
+        feature_intensities = tf.gather_nd(softmax, gather_indices) # N, C, 1
+        
+        keypoints_with_intensities = tf.concat([feature_intensities, spatial_soft_argmax], -1)
+        
+        x = self.flatten(keypoints_with_intensities)
+            
+        x = self.dense1(x)
+        
+        return self.dense2(x), spatial_soft_argmax
+
+
+
+
+
 class impala_cnn(tf.keras.Model):
     def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False, l1=16, l2=32, l3=32):
         super(impala_cnn, self).__init__()
@@ -374,4 +441,4 @@ class deep_impala_cnn(impala_cnn):
         super(deep_impala_cnn, self).__init__(img_height, img_width, img_channels, embedding_size, return_spatial_softmax, l1=64, l2=128, l3=128)
 
 
-CNN_DICT= {'spatial_softmax': spatial_softmax_cnn, 'impala': impala_cnn, 'deep_impala': deep_impala_cnn}
+CNN_DICT= {'spatial_softmax': spatial_softmax_cnn, 'intensities_spatial_softmax': intensities_spatial_softmax_cnn, 'impala': impala_cnn, 'deep_impala': deep_impala_cnn}
