@@ -45,6 +45,7 @@ parser.add_argument('-r', '--resume', default=False, action='store_true')
 parser.add_argument('-B', '--beta', type=float, default=0.00003)
 parser.add_argument('-i', '--images', default=False, action='store_true')
 parser.add_argument('-gi', '--gripper_images', default=False, action='store_true')
+parser.add_argument('-cnn', '--cnn_type', type=str, default="spatial_softmax")
 parser.add_argument('-sim', '--sim', default='Unity', help='Unity/Pybullet')
 parser.add_argument('-vq', '--discrete', default=False, action='store_true')
 parser.add_argument('-nm', '--normalize', default=False, action='store_true')
@@ -200,7 +201,7 @@ if args.init_from != "":
     inputs['beta'] = args.beta
     trainer.distributed_train_step(inputs)
     print(f"Initing from: {args.init_from}")
-    trainer.load_weights(str(STORAGE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
+    trainer.load_weights(str(SAVE_PATH/'saved_models'/args.init_from), from_checkpoint=True)
 
 if args.resume:
   # WandB reinit

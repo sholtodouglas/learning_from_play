@@ -151,7 +151,7 @@ class PlayDataloader():
         self.window_shift = window_shift
         self.include_imgs = include_imgs
         self.include_gripper_imgs = include_gripper_imgs
-        self.shuffle_size = int(batch_size * (window_size / window_shift)) if shuffle_size is None else shuffle_size
+        self.shuffle_size = int(batch_size * (window_size / window_shift))*10 if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
         self.seed = seed
@@ -406,7 +406,7 @@ class labelled_dl():
             sim = 'Unity',
             num_workers=4,
             batch_size=64,
-            shuffle_size=64,
+            shuffle_size=512,
             normalize=False,
             read_func=read_traj_tfrecord):
 

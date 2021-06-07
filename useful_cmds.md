@@ -29,44 +29,12 @@ export PROJECT_ID=learning-from-play-303306
 
 
 
-gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
+gcloud alpha compute tpus tpu-vm create lfp4 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
-gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
-
-
+gcloud alpha compute tpus tpu-vm ssh lfp4 --zone europe-west4-a --project learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm delete lfp1 --zone=europe-west4-a
 
-# Creating TPU + VM
-
-```
-ctpu up \
---project=learning-from-play-303306 \
---zone=$TPU_ZONE \
---tf-version=2.4.1 \
---name=$TPU_NAME \
---tpu-size=$TPU_SIZE \
---machine-type=e2-medium \
---disk-size-gb=50
-
-
-ctpu up \
---project=learning-from-play-303306 \
---zone=$TPU_ZONE \
---tf-version=2.4.1 \
---name=$TPU_NAME \
---tpu-size=$TPU_SIZE \
---disk-size-gb=50
-
-[--preemptible]
-```
-Can also potentially opt for an `f1-micro` if we're still under-utilising the VM
-
-# ssh into vm instance
-
-See more info here: https://cloud.google.com/sdk/docs/quickstart
-
-```gcloud compute ssh root@$TPU_NAME --zone=$TPU_ZONE```
 
 
 # Use tmux so that the process keeps running after ssh disconnect
@@ -74,6 +42,7 @@ See more info here: https://cloud.google.com/sdk/docs/quickstart
 # optionally clone the repo if not already there
 # libTPU breaks with a normal TF installation
 ```
+export BUCKET_NAME=lfp_europe_west4_a
 git clone https://github.com/tensorflow/models.git
 pip3 install -r models/official/requirements.txt
 
@@ -84,10 +53,6 @@ cd learning_from_play
 mkdir data
 gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
 ```
-gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
-
-export BUCKET_NAME=lfp_europe_west4_a
-export TPU_NAME=lfp1
 # Run the sample training script for GCS setup
 
 ```
@@ -197,7 +162,7 @@ python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25
 
 
 python3 train_lfp.py \
-tputest \
+2048_b001_lim \
 --bulk_datasets unity/envHz25 unity/augmented_diverse_new \
 --train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
@@ -220,6 +185,28 @@ tputest \
 -lang \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 20 \
+--standard_split 16 \
 --lang_split 8 \
---bulk_split 8
+--bulk_split 8 \
+--init_from superencv2
+
+
+bigenc_IMB002_lang_full_enc_v2, 1024, 0.02, -enc_all
+super_enc, lim, 2048, 
+
+
+
+
+# OLD
+```
+ctpu up \
+--project=learning-from-play-303306 \
+--zone=$TPU_ZONE \
+--tf-version=2.4.1 \
+--name=$TPU_NAME \
+--tpu-size=$TPU_SIZE \
+--machine-type=e2-medium \
+--disk-size-gb=50
+
+'''
+
