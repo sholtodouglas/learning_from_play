@@ -325,7 +325,7 @@ class spatial_softmax_cnn(tf.keras.Model):
 class intensities_spatial_softmax_cnn(tf.keras.Model):
     # TODO: Make height width dependent
     def __init__(self,  img_height=128, img_width = 128, img_channels=3, embedding_size=64, return_spatial_softmax = False):
-        super(spatial_softmax_cnn, self).__init__()
+        super(intensities_spatial_softmax_cnn, self).__init__()
         self.img_height = img_height
         self.img_width = img_width
         self.img_channels = img_channels

@@ -29,11 +29,11 @@ export PROJECT_ID=learning-from-play-303306
 
 
 
-gcloud alpha compute tpus tpu-vm create lfp4 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
+gcloud alpha compute tpus tpu-vm create lfp5 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
-gcloud alpha compute tpus tpu-vm ssh lfp4 --zone europe-west4-a --project learning-from-play-303306
+gcloud alpha compute tpus tpu-vm ssh lfp8 --zone europe-west4-a --project learning-from-play-303306
 
-gcloud alpha compute tpus tpu-vm delete lfp1 --zone=europe-west4-a
+gcloud alpha compute tpus tpu-vm delete lfp2 --zone=europe-west4-a
 
 
 
@@ -42,6 +42,7 @@ gcloud alpha compute tpus tpu-vm delete lfp1 --zone=europe-west4-a
 # optionally clone the repo if not already there
 # libTPU breaks with a normal TF installation
 ```
+tmux
 export BUCKET_NAME=lfp_europe_west4_a
 git clone https://github.com/tensorflow/models.git
 pip3 install -r models/official/requirements.txt
@@ -162,7 +163,7 @@ python3 train_lfp.py IMB002_lang_full_enc_bigCNNv2 --bulk_datasets unity/envHz25
 
 
 python3 train_lfp.py \
-2048_b001_lim \
+2048_b001_lim_impala \
 --bulk_datasets unity/envHz25 unity/augmented_diverse_new \
 --train_datasets unity/diverse unity/diverse_new \
 --test_datasets unity/diverse_test \
@@ -188,10 +189,130 @@ python3 train_lfp.py \
 --standard_split 16 \
 --lang_split 8 \
 --bulk_split 8 \
---init_from superencv2
+--cnn impala
+
+python3 train_lfp.py \
+2048_b001_lim_deep_impala \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new \
+--test_datasets unity/diverse_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.01 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8 \
+--cnn deep_impala
+
+python3 train_lfp.py \
+2048_b001_lim_intensities_spatial_softmax \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new \
+--test_datasets unity/diverse_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.01 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8 \
+--cnn intensities_spatial_softmax
 
 
-bigenc_IMB002_lang_full_enc_v2, 1024, 0.02, -enc_all
+python3 train_lfp.py \
+2048_b002_lim_intensities_spatial_softmax \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new \
+--test_datasets unity/diverse_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.02 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8 \
+--cnn intensities_spatial_softmax
+
+python3 train_lfp.py \
+2048_b002_full_intensities_spatial_softmax \
+--bulk_datasets unity/envHz25 unity/augmented_diverse_new \
+--train_datasets unity/diverse unity/diverse_new \
+--test_datasets unity/diverse_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.02 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 16 \
+--lang_split 8 \
+--bulk_split 8 \
+--cnn intensities_spatial_softmax
+-enc_all
+
+
+
+
+bigenc_IMB002_lang_full_enc_v2, 1024, 0.02, 
 super_enc, lim, 2048, 
 
 
@@ -209,4 +330,3 @@ ctpu up \
 --disk-size-gb=50
 
 '''
-
