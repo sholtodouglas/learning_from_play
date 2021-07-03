@@ -90,7 +90,6 @@ class LFPTrainer():
         if args.fp16:
             optimizer = mixed_precision.LossScaleOptimizer(optimizer)
 
-        grad_clips = ['actor': ]
         if self.args.num_distribs is None: # different sized clips due to different sized losses
             grad_clips = {'actor': 0.06,
                         'encoder': 0.03,
@@ -110,8 +109,8 @@ class LFPTrainer():
 
 
         self.models = {
-            'actor':{'model': actor}
-            'encoder':{'model': encoder)
+            'actor':{'model': actor},
+            'encoder':{'model': encoder}
         }
         if not args.discrete:
             self.models['planner'] = {'model':planner}
@@ -121,11 +120,11 @@ class LFPTrainer():
             self.models['img_embed_to_goal_space'] = {'model': img_embed_to_goal_space}
         if args.gripper_images:
             self.models['gripper_cnn'] = {'model': gripper_cnn}
-        if args.lang:
+        if args.use_language:
             self.models['lang_embed_to_goal_space'] = {'model': lang_embed_to_goal_space}
 
-        for k, v in models.items():
-            models[k]['optimiser'] = optimizer(learning_rate=args.learning_rate, clipnorm = grad_clips[v['model']])
+        for k, v in self.models.items():
+            self.models[k]['optimiser'] = optimizer(learning_rate=args.learning_rate, clipnorm = grad_clips[k])
 
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
@@ -135,7 +134,7 @@ class LFPTrainer():
         self.metrics = {}
         self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
         self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
-        for k,v in models.items():
+        for k,v in self.models.items():
             self.metrics[f"{k}_grad_norm"] = tf.keras.metrics.Mean(name='f"{k}_grad_norm"')
 
         self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
@@ -421,7 +420,7 @@ class LFPTrainer():
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
                                 tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape, tf.GradientTape as discrete_projection_tape:
 
-            tapes = [actor_tape encoder_tape, planner_tape, cnn_tape, gripper_cnn_tape, img_goal_embed_tape, lang_goal_embed_tape, discrete_projection_tape]
+            tapes = [actor_tape, encoder_tape, planner_tape, cnn_tape, gripper_cnn_tape, img_goal_embed_tape, lang_goal_embed_tape, discrete_projection_tape]
             tape_idx = 0 # as we use tapes, progress to the next one
 
 
@@ -451,7 +450,7 @@ class LFPTrainer():
                         self.models[k]['optimizer'].apply_gradients(zip(self.models[k]['gradients'], self.models[k]['model'].trainable_variables))
 
                 
-                record(tf.linalg.global_norm(sum[v['gradients'] for k,v in self.models.items()]]), self.metrics['global_grad_norm'])
+                record(tf.linalg.global_norm(sum([v['gradients'] for k,v in self.models.items()])), self.metrics['global_grad_norm'])
 
 
         return record(loss, self.metrics['train_loss'])
