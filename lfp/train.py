@@ -385,7 +385,8 @@ class LFPTrainer():
 
                 z_enc = z_q + tf.stop_gradient(z_hard - z_q)
                 z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
-                print(z_enc.shape)
+                z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
+
             else:
                 encoding = self.encoder([to_encode])
                 z_enc = encoding.sample()
@@ -417,10 +418,9 @@ class LFPTrainer():
 
         inputs = self.make_sequences_variable_length(inputs) 
 
-        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
-                                tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape, tf.GradientTape as discrete_projection_tape:
+        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape, tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape:
 
-            tapes = [actor_tape, encoder_tape, planner_tape, cnn_tape, gripper_cnn_tape, img_goal_embed_tape, lang_goal_embed_tape, discrete_projection_tape]
+            tapes = [actor_tape, encoder_tape, planner_tape, cnn_tape, gripper_cnn_tape, img_goal_embed_tape, lang_goal_embed_tape]
             tape_idx = 0 # as we use tapes, progress to the next one
 
 
@@ -444,14 +444,11 @@ class LFPTrainer():
                     raise NotImplementedError
                 else:
                     for k,v in self.models.items():
-                        self.models[k]['gradients'] = self.tapes[tape_idx].gradient(loss, v['model'].trainable_variables)
+                        self.models[k]['gradients'] = tapes[tape_idx].gradient(loss, v['model'].trainable_variables)
                         tape_idx += 1
-                        self.models[k]['norm'] = record(tf.linalg.global_norm(model[k]['gradients']), self.metrics[f'{k}_grad_norm'])
-                        self.models[k]['optimizer'].apply_gradients(zip(self.models[k]['gradients'], self.models[k]['model'].trainable_variables))
-
-                
-                record(tf.linalg.global_norm(sum([v['gradients'] for k,v in self.models.items()])), self.metrics['global_grad_norm'])
-
+                        self.models[k]['norm'] = record(tf.linalg.global_norm(self.models[k]['gradients']), self.metrics[f'{k}_grad_norm'])
+                        self.models[k]['optimiser'].apply_gradients(zip(self.models[k]['gradients'], self.models[k]['model'].trainable_variables))
+                        
 
         return record(loss, self.metrics['train_loss'])
 
@@ -566,9 +563,6 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
           
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
-
-    if args.discrete:
-        model_params['latent_dim'] = args.latent_dim * args.vq_tiles # there will be a number of tiles
 
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
 
