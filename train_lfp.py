@@ -48,6 +48,8 @@ parser.add_argument('-gi', '--gripper_images', default=False, action='store_true
 parser.add_argument('-cnn', '--cnn_type', type=str, default="spatial_softmax")
 parser.add_argument('-sim', '--sim', default='Unity', help='Unity/Pybullet')
 parser.add_argument('-vq', '--discrete', default=False, action='store_true')
+parser.add_argument('-tmp', '--temperature', type=float, default=0.1)
+parser.add_argument('--vq_tiles', type=int, default=5) # split into 5 tiles, must cleanly divide into max_seq_len
 parser.add_argument('-nm', '--normalize', default=False, action='store_true')
 parser.add_argument('-lang', '--use_language', default=False, action='store_true')
 parser.add_argument('-cont', '--use_contrastive', default=False, action='store_true')
@@ -257,21 +259,22 @@ while t < args.train_steps:
         # if not args.images:
             # How we plot the cluster figs
         try:
-            batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,4)]
-            super_batch = {}
-            for k in batches[0].keys():
-                super_batch[k] = np.concatenate([b[k] for b in batches])
-            lang_batch = dataset_coordinator.labelled_test_ds.next()
-            fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
-            #if not args.gcbc and not args.images:
-            #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
+            if not args.discrete:
+                batches = [trainer.make_sequences_variable_length(dataset_coordinator.plotting_background_dataset.next()) for i in range(0,4)]
+                super_batch = {}
+                for k in batches[0].keys():
+                    super_batch[k] = np.concatenate([b[k] for b in batches])
+                lang_batch = dataset_coordinator.labelled_test_ds.next()
+                fig_enc, fig_plan, z_enc, z_plan = lfp.plotting.produce_cluster_fig(super_batch, lang_batch, trainer, args=args)
+                #if not args.gcbc and not args.images:
+                #   z_enc, z_plan = produce_cluster_fig(next(plotting_dataset), encoder, planner, TEST_DATA_PATHS[0], num_take=dl.batch_size//4)
 
-            #   #Comet
-            #   experiment.log_figure('z_enc', z_enc, step=t)
-            #   experiment.log_figure('z_plan', z_plan,step=t)
+                #   #Comet
+                #   experiment.log_figure('z_enc', z_enc, step=t)
+                #   experiment.log_figure('z_plan', z_plan,step=t)
 
-            # WandB
-            wandb.log({'z_enc':fig_enc, 'z_plan':fig_plan}, step=t)
+                # WandB
+                wandb.log({'z_enc':fig_enc, 'z_plan':fig_plan}, step=t)
         except Exception as e:
             print(e)
           #latent_fig = project_enc_and_plan(ze, zp)
