@@ -91,41 +91,28 @@ class LFPTrainer():
             optimizer = mixed_precision.LossScaleOptimizer(optimizer)
 
         if self.args.num_distribs is None: # different sized clips due to different sized losses
-            grad_clips = {'actor': 0.06,
-                        'encoder': 0.03,
-                        'planner': 0.001,
-                        'cnn': 10, # TODO find value if doing non de
-                        'gripper_cnn': 10.0,
-                        'img_embed_to_goal_space': 5.0,
-                        'lang_embed_to_goal_space': 5.0,}
+            actor_clip  = 0.06
+            encoder_clip = 0.03
+            planner_clip = 0.001
+            cnn_clip = 10 # TODO find value if doing non de
+            gripper_cnn_clip = 10.0
+            mapper_clip = 5.0
         else:
-            grad_clips = {'actor': 400.0,
-                    'encoder': 30,
-                    'planner': 5.0,
-                    'cnn': 20, # TODO find value if doing non de
-                    'gripper_cnn': 10.0,
-                    'img_embed_to_goal_space': 5.0,
-                    'lang_embed_to_goal_space': 5.0,}
+            actor_clip = 400.0
+            encoder_clip = 30.0
+            planner_clip = 5.0
+            cnn_clip = 20.0
+            gripper_cnn_clip = 10.0
+            mapper_clip = 5.0
 
-
-        self.models = {
-            'actor':{'model': actor},
-            'encoder':{'model': encoder}
-        }
-        if not args.discrete:
-            self.models['planner'] = {'model':planner}
-
-        if args.images:
-            self.models['cnn'] = {'model': cnn}
-            self.models['img_embed_to_goal_space'] = {'model': img_embed_to_goal_space}
-        if args.gripper_images:
-            self.models['gripper_cnn'] = {'model': gripper_cnn}
-        if args.use_language:
-            self.models['lang_embed_to_goal_space'] = {'model': lang_embed_to_goal_space}
-
-        for k, v in self.models.items():
-            self.models[k]['optimiser'] = optimizer(learning_rate=args.learning_rate, clipnorm = grad_clips[k])
-
+        # bit boiler platy having them all separate, but it makes tracking separate gradients really clean
+        self.actor_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=actor_clip)
+        self.encoder_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
+        self.planner_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=planner_clip)
+        self.cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=cnn_clip)
+        self.gripper_cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=gripper_cnn_clip)
+        self.img_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
+        self.lang_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
@@ -134,8 +121,13 @@ class LFPTrainer():
         self.metrics = {}
         self.metrics['train_loss'] = tf.keras.metrics.Mean(name='train_loss')
         self.metrics['valid_loss'] = tf.keras.metrics.Mean(name='valid_loss')
-        for k,v in self.models.items():
-            self.metrics[f"{k}_grad_norm"] = tf.keras.metrics.Mean(name='f"{k}_grad_norm"')
+        self.metrics['actor_grad_norm'] = tf.keras.metrics.Mean(name='actor_grad_norm')
+        self.metrics['encoder_grad_norm'] = tf.keras.metrics.Mean(name='encoder_grad_norm')
+        self.metrics['planner_grad_norm'] = tf.keras.metrics.Mean(name='planner_grad_norm')
+        self.metrics['cnn_grad_norm'] = tf.keras.metrics.Mean(name='cnn_grad_norm')
+        self.metrics['gripper_cnn_grad_norm'] = tf.keras.metrics.Mean(name='gripper_cnn_grad_norm')
+        self.metrics['img_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='img_embed_to_goal_space_norm')
+        self.metrics['lang_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='lang_embed_to_goal_space_norm')
 
         self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
 
@@ -418,10 +410,8 @@ class LFPTrainer():
 
         inputs = self.make_sequences_variable_length(inputs) 
 
-        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape, tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape:
-
-            tapes = [actor_tape, encoder_tape, planner_tape, cnn_tape, gripper_cnn_tape, img_goal_embed_tape, lang_goal_embed_tape]
-            tape_idx = 0 # as we use tapes, progress to the next one
+        with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
+                                tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape:
 
 
             if self.args.gcbc:
@@ -441,13 +431,52 @@ class LFPTrainer():
                     loss = act_enc_loss + reg_loss * beta
 
                 if self.args.fp16:
-                    raise NotImplementedError
+                    actor_gradients = self.compute_fp16_grads(self.actor_optimizer, loss, actor_tape, self.actor)
+                    encoder_gradients = self.compute_fp16_grads(self.encoder_optimizer, loss, encoder_tape, self.encoder)
+                    planner_gradients = self.compute_fp16_grads(self.planner_optimizer, loss, planner_tape, self.planner)
+                    if self.args.images: 
+                        cnn_gradients = self.compute_fp16_grads(self.cnn_optimizer, loss, cnn_tape, self.cnn)
+                        goal_to_goal_space_grads = self.compute_fp16_grads(self.img_embed_to_goal_space_optimizer, loss, img_goal_embed_tape, self.img_embed_to_goal_space) 
+                    if self.args.gripper_images: gripper_cnn_gradients = self.compute_fp16_grads(self.gripper_cnn_optimizer, loss, gripper_cnn_tape, self.gripper_cnn)
+                    if self.args.use_language: raise NotImplementedError
                 else:
-                    for k,v in self.models.items():
-                        self.models[k]['gradients'] = tapes[tape_idx].gradient(loss, v['model'].trainable_variables)
-                        tape_idx += 1
-                        self.models[k]['norm'] = record(tf.linalg.global_norm(self.models[k]['gradients']), self.metrics[f'{k}_grad_norm'])
-                        self.models[k]['optimiser'].apply_gradients(zip(self.models[k]['gradients'], self.models[k]['model'].trainable_variables))
+                    actor_gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
+                    encoder_gradients = encoder_tape.gradient(loss, self.encoder.trainable_variables)
+                    planner_gradients = planner_tape.gradient(loss, self.planner.trainable_variables)
+                    if self.args.images: 
+                        cnn_gradients = cnn_tape.gradient(loss, self.cnn.trainable_variables)
+                        img_goal_to_goal_space_grads = img_goal_embed_tape.gradient(loss, self.img_embed_to_goal_space.trainable_variables)
+                    if self.args.gripper_images: gripper_cnn_gradients = gripper_cnn_tape.gradient(loss, self.gripper_cnn.trainable_variables)
+                    if self.args.use_language: lang_goal_to_goal_space_grads = lang_goal_embed_tape.gradient(loss, self.lang_embed_to_goal_space.trainable_variables)
+
+
+                #################### Calc indivual norms
+                actor_norm = record(tf.linalg.global_norm(actor_gradients), self.metrics['actor_grad_norm'])
+                encoder_norm = record(tf.linalg.global_norm(encoder_gradients), self.metrics['encoder_grad_norm'])
+                planner_norm = record(tf.linalg.global_norm(planner_gradients), self.metrics['planner_grad_norm'])
+                if self.args.images: 
+                    cnn_norm = record(tf.linalg.global_norm(cnn_gradients), self.metrics['cnn_grad_norm'])
+                    img_goal_to_goal_space_norm = record(tf.linalg.global_norm(img_goal_to_goal_space_grads), self.metrics['img_embed_to_goal_space_norm'])
+                if self.args.gripper_images: gripper_cnn_norm = record(tf.linalg.global_norm(gripper_cnn_gradients), self.metrics['gripper_cnn_grad_norm'])
+                if self.args.use_language: lang_goal_to_goal_space_norm = record(tf.linalg.global_norm(lang_goal_to_goal_space_grads), self.metrics['lang_embed_to_goal_space_norm'])
+
+                ##################### Calc global grad norm
+                gradients = actor_gradients + encoder_gradients + planner_gradients
+                if self.args.images: gradients = gradients + cnn_gradients + img_goal_to_goal_space_grads
+                if self.args.gripper_images: gradients += gripper_cnn_gradients
+                if self.args.use_language: gradients += lang_goal_to_goal_space_grads
+                record(tf.linalg.global_norm(gradients), self.metrics['global_grad_norm'])
+
+                #################### Apply optimizer updates
+                self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
+                self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
+                if not self.args.discrete: self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables)) # TODO TRAIN AS SECOND STAGE
+                if self.args.images: 
+                    self.cnn_optimizer.apply_gradients(zip(cnn_gradients, self.cnn.trainable_variables))
+                    self.img_embed_to_goal_space_optimizer.apply_gradients(zip(img_goal_to_goal_space_grads, self.img_embed_to_goal_space.trainable_variables))
+                if self.args.gripper_images: self.gripper_cnn_optimizer.apply_gradients(zip(gripper_cnn_gradients, self.gripper_cnn.trainable_variables))
+                if self.args.use_language: self.lang_embed_to_goal_space_optimizer.apply_gradients(zip(lang_goal_to_goal_space_grads, self.lang_embed_to_goal_space.trainable_variables))
+                ################### Fin
                         
 
         return record(loss, self.metrics['train_loss'])
@@ -564,7 +593,7 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
         model_params['layer_size'] = args.planner_layer_size
         planner = lfp.model.create_planner(**model_params)
 
-    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits)
+    actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits, discrete=args.discrete)
 
     cnn, gripper_cnn, img_embed_to_goal_space, lang_embed_to_goal_space = None, None, None, None
     if args.images:

@@ -56,7 +56,7 @@ def logistic_mixture(inputs, qbits=None):
 
 def create_actor(obs_dim, act_dim, goal_dim,
                  layer_size=1024, latent_dim=256, epsilon=1e-4, num_distribs=None, qbits=None, gcbc=False,
-                 training=True, return_state=False, **kwargs):
+                 training=True, return_state=False, discrete=False, disc_embed_size=64, **kwargs):
     # params #
     batch_size = None if training else 1
     stateful = not training
@@ -67,8 +67,9 @@ def create_actor(obs_dim, act_dim, goal_dim,
     g = Input(shape=(None, goal_dim), batch_size=batch_size, dtype=tf.float32, name='input_goals')
 
     # RNN #
-    if gcbc:
-        x = Concatenate(axis=-1)([o, g])
+    if discrete:
+        embed = Dense(disc_embed_size, activation = 'relu', name='disc_to_cts_embedding')(z)
+        x = Concatenate(axis=-1)([o, embed, g])
     else:
         x = Concatenate(axis=-1)([o, z, g])
 
