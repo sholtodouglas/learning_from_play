@@ -72,7 +72,7 @@ class BetaScheduler():
 
 class LFPTrainer():
 
-    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, gripper_cnn=None, img_embed_to_goal_space=None, lang_embed_to_goal_space = None\
+    def __init__(self, args, actor, dl, encoder=None, planner=None, cnn=None, gripper_cnn=None, img_embed_to_goal_space=None, lang_embed_to_goal_space = None,\
                 optimizer=Adam, strategy=None, global_batch_size=32):
 
         self.actor = actor
