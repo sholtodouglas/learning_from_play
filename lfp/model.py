@@ -166,6 +166,30 @@ def create_planner(obs_dim, goal_dim,
     mixture = tfpl.DistributionLambda(latent_normal, name='latent_variable')((mu, scale))
     return Model([o_i, o_g], mixture)
 
+def create_discrete_planner(obs_dim, goal_dim,
+                   layer_size=2048, latent_dim=256, epsilon=1e-4, training=True, **kwargs):
+    '''
+    takes in size B, N_TILES, D for start_state and goal_state
+    LSTM then predicts which discrete plan it should be for each tile
+    '''
+    # params #
+    batch_size = None if training else 1
+    stateful = not training
+
+    # Input #
+    o = Input(shape=(None, obs_dim), batch_size=batch_size, dtype=tf.float32, name='input_obs')
+    g = Input(shape=(None, goal_dim), batch_size=batch_size, dtype=tf.float32, name='input_goals')
+
+    # RNN #
+    x = Concatenate(axis=-1)([o, g])
+    x = LSTM(layer_size, return_sequences=True, stateful=stateful, name='LSTM_in_1', return_state=False)(x)
+    x = LSTM(layer_size, return_sequences=True, stateful=stateful, name='LSTM_in_2', return_state=False)(x)
+    tokens = Dense(latent_dim, name='acts')(x)
+
+
+
+    return Model([o, g], tokens) 
+
 # maps from sentence embedding space to goal dim space
 def create_goal_space_mapper(input_embedding_dim, goal_embedding_dim,
                    layer_size=2048, **kwargs):
@@ -382,7 +406,7 @@ class intensities_spatial_softmax_cnn(tf.keras.Model):
             
         x = self.dense1(x)
         
-        return self.dense2(x), spatial_soft_argmax
+        return self.dense2(x), keypoints_with_intensities
 
 
 

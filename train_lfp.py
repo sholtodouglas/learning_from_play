@@ -229,6 +229,7 @@ from lfp.metric import log # gets state and clears simultaneously
 
 while t < args.train_steps:
     start_time = time.time()
+    trainer.update_schedules(t)
     inputs = dataset_coordinator.next()
     inputs['beta'] = args.beta
     trainer.distributed_train_step(inputs)

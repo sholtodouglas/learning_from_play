@@ -67,6 +67,23 @@ class BetaScheduler():
         plt.xlabel('Steps')
         plt.ylabel('Beta')
 
+class cosineDecay():
+    def __init__(self, min_frac=1/16, max=1.0, decay_steps=20000): # min is as a fraction
+        self.min_frac = min_frac
+        self.max = max
+        self.decay_steps = decay_steps
+
+    def schedule(self, step):
+        step = min(step, self.decay_steps)
+        cosine_decay = 0.5 * (1 + np.cos(np.pi * step / self.decay_steps))
+        decayed = (1 - self.min_frac) * cosine_decay + self.min_frac
+        return self.max * decayed
+
+    def _plot_schedule(self):
+        ts = np.arange(self.decay_steps*2, step=100)
+        plt.plot(ts, [self.schedule(t) for t in ts])
+        plt.xlabel('Steps')
+        plt.ylabel('Beta')
 
 
 
@@ -105,7 +122,10 @@ class LFPTrainer():
             gripper_cnn_clip = 10.0
             mapper_clip = 5.0
 
-        # bit boiler platy having them all separate, but it makes tracking separate gradients really clean
+        self.temperature = args.temperature
+        self.temp_schedule = cosineDecay(min_frac=1/16, max=args.temperature, decay_steps=20000)
+
+        # bit boiler platy having them all separate, but I tried a really clean dicts+comprehensions method and the TPU complained about having non XLA functions - so it stays this way for now. 
         self.actor_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=actor_clip)
         self.encoder_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
         self.planner_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=planner_clip)
@@ -138,6 +158,9 @@ class LFPTrainer():
 
         self.metrics['train_reg_loss'] = tf.keras.metrics.Mean(name='reg_loss')
         self.metrics['valid_reg_loss'] = tf.keras.metrics.Mean(name='valid_reg_loss')
+    
+        self.metrics['train_discrete_planner_loss'] = tf.keras.metrics.Mean(name='train_discrete_planner_loss')
+        self.metrics['valid_discrete_planner_loss'] = tf.keras.metrics.Mean(name='valid_discrete_planner_loss')
 
         self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
         self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
@@ -159,6 +182,9 @@ class LFPTrainer():
         self.metrics['valid_lang_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
         self.chkpt_manager = None
+
+    def update_schedules(step):
+        self.temperature = self.temp_schedule(step)
 
     def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
         if self.args.num_distribs is not None:
@@ -358,7 +384,7 @@ class LFPTrainer():
                 to_encode = img_embeddings
             
             
-            plan = self.planner([states[:, 0, :], goals[:, 0, :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
+            
             if self.args.discrete:
                 # We want to chunk up the inputs, so each seq goes from B, LEN, EMBED to 
                 # that way the lstm encodes little chunks of the sequence
@@ -379,7 +405,17 @@ class LFPTrainer():
                 z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
                 z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
 
+                ## Planner
+                # Tile out start and goal as many times as there are vqtiles - TODO maybe better to use positional encoding and a static planner?
+                start_vq_tiled, goal_vq_tiled = tf.tile(states[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1]), tf.tile(goals[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1])
+                plan = self.planner([start_vq_tiled, goal_vq_tiled]) # B, VQ_TILES, D
+                
+                z_plan_hard =  tf.one_hot(tf.math.argmax(plan, axis=-1), plan.shape[-1], dtype=plan.dtype)  # B, VQ_TILES, D
+                
+                z_plan_tiled = tf.repeat(z_plan_hard, repeats = T//self.args.vq_tiles, axis= 1)  # B,T,D
+
             else:
+                plan = self.planner([states[:, 0, :], goals[:, 0, :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
                 encoding = self.encoder([to_encode])
                 z_enc = encoding.sample()
                 z_plan = plan.sample()
@@ -387,10 +423,7 @@ class LFPTrainer():
                 z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
 
             enc_policy = self.actor([states, z_enc_tiled, goals])
-            if self.args.discrete:
-                plan_policy = enc_policy # TODO Concurrently train autoregressive prior
-            else:
-                plan_policy = self.actor([states, z_plan_tiled, goals])
+            plan_policy = self.actor([states, z_plan_tiled, goals])
             return enc_policy, plan_policy, encoding, plan, indices, actions, masks, seq_lens, sentence_embeddings
             # How is step used?
             # In the train and test functions below, where we use enc policy for logloss, plan policy for validation mae, encoding and plan for reg loss
@@ -424,7 +457,10 @@ class LFPTrainer():
                 
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 if self.args.discrete:
-                    loss = act_enc_loss
+                    planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
+                    record(planner_loss, self.metrics['train_discrete_planner_loss'])
+                    loss = act_enc_loss + planner_loss * beta
+
                 else:
                     act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['train_act_with_plan_loss'])
                     reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
@@ -498,23 +534,23 @@ class LFPTrainer():
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
             
             if self.args.discrete:
-                loss = act_enc_loss
-                log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
-                                 self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
+                planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
+                record(planner_loss, self.metrics['valid_discrete_planner_loss'])
+                loss = act_enc_loss + planner_loss * beta
             else:
                 act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
                 reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
                 loss = act_plan_loss + reg_loss * beta
-                log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
-                                 self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
-                log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_enc_position_loss'], \
-                                 self.metrics['valid_enc_max_position_loss'], self.metrics['valid_enc_rotation_loss'], self.metrics['valid_enc_max_rotation_loss'], self.metrics['valid_enc_gripper_loss'], self.compute_MAE)
+            log_action_breakdown(plan_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_position_loss'], \
+                                self.metrics['valid_max_position_loss'], self.metrics['valid_rotation_loss'], self.metrics['valid_max_rotation_loss'], self.metrics['valid_gripper_loss'], self.compute_MAE)
+            log_action_breakdown(enc_policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.metrics['valid_enc_position_loss'], \
+                                self.metrics['valid_enc_max_position_loss'], self.metrics['valid_enc_rotation_loss'], self.metrics['valid_enc_max_rotation_loss'], self.metrics['valid_enc_gripper_loss'], self.compute_MAE)
                 
-                if self.args.use_language:
-                  # setting probabilistic = false and just passing in the .sample() of the distrib as for some reason slicing it auto samples?
-                  log_action_breakdown(plan_policy.sample()[indices['unlabelled']:], actions[indices['unlabelled']:], mask[indices['unlabelled']:], seq_lens[indices['unlabelled']:], False, self.dl.quaternion_act,
-                    self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
-                        self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
+            if self.args.use_language:
+                # setting probabilistic = false and just passing in the .sample() of the distrib as for some reason slicing it auto samples?
+                log_action_breakdown(plan_policy.sample()[indices['unlabelled']:], actions[indices['unlabelled']:], mask[indices['unlabelled']:], seq_lens[indices['unlabelled']:], False, self.dl.quaternion_act,
+                self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
+                    self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
 
         return record(loss,self.metrics['valid_loss'])
 
@@ -546,19 +582,24 @@ class LFPTrainer():
 
     def save_weights(self, path, run_id=None, experiment_key=None):
 
+        
         if self.chkpt_manager is None:
             ckpt = tf.train.Checkpoint(**self.get_saved_objects())
-            self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
+            self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
             save_path = self.chkpt_manager.save()
         else:
             save_path = self.chkpt_manager.save()
+        
 
 
     def load_weights(self, path, with_optimizer=False, from_checkpoint=False):
-        # With checkpoint
-        ckpt = tf.train.Checkpoint(**self.get_saved_objects())
-        self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=3)
-        ckpt.restore(tf.train.latest_checkpoint(path))
+    # With checkpoint
+        if os.path.exists(path):
+            ckpt = tf.train.Checkpoint(**self.get_saved_objects())
+            self.chkpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=1)
+            ckpt.restore(tf.train.latest_checkpoint(path))
+        else:
+            print(f"try: gsutil -m cp -r gs://{self.args.bucket_name}/saved_models/{self.args.run_name} saved_models/")
 
 def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
     
@@ -587,11 +628,13 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
             model_params['enc_in_dim'] = args.img_embedding_size
         if args.discrete:
           encoder = lfp.model.create_discrete_encoder(**model_params)
+          planner = lfp.model.create_discrete_planner(**model_params)
         else:
           encoder = lfp.model.create_encoder(**model_params)
+          planner = lfp.model.create_planner(**model_params)
           
         model_params['layer_size'] = args.planner_layer_size
-        planner = lfp.model.create_planner(**model_params)
+        
 
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits, discrete=args.discrete)
 

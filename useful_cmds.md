@@ -31,7 +31,7 @@ export PROJECT_ID=learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm create lfp3 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
-gcloud alpha compute tpus tpu-vm ssh lfp4 --zone europe-west4-a --project learning-from-play-303306
+gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm delete lfp2 --zone=europe-west4-a
 
@@ -127,9 +127,41 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 
 python3 train_lfp.py \
-disc_1024_tmp_0.1 \
+disc_1024_0.1 \
 --train_datasets unity/top_down_diverse_new  \
---test_datasetsunity/top_down_diverse_new_test \
+--test_datasets unity/top_down_diverse_new_test \
+-tfr \
+-s GCS \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 1024 \
+-lr 3e-4 \
+-B 0.0 \
+-n 5 \
+-t 1000000 \
+-wmin 25 \
+-wmax 50 \
+-i \
+-gi \
+-lang \
+-vq \
+-B 1
+-tmp 0.1 \
+--vq_tiles 5 \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 28 \
+--lang_split 4 \
+--bulk_split 0 \
+--cnn intensities_spatial_softmax
+
+python3 train_lfp.py \
+disc_4096_0.1 \
+--train_datasets unity/top_down_diverse_new  \
+--test_datasets unity/top_down_diverse_new_test \
 -tfr \
 -s GCS \
 -d TPU \
@@ -154,13 +186,13 @@ disc_1024_tmp_0.1 \
 --tpu_name=$TPU_NAME \
 --standard_split 28 \
 --lang_split 4 \
---bulk_split 0
+--bulk_split 0 \
 --cnn intensities_spatial_softmax
 
 python3 train_lfp.py \
-disc_4096_tmp_0.1 \
+disc_1024_1 \
 --train_datasets unity/top_down_diverse_new  \
---test_datasetsunity/top_down_diverse_new_test \
+--test_datasets unity/top_down_diverse_new_test \
 -tfr \
 -s GCS \
 -d TPU \
@@ -179,44 +211,13 @@ disc_4096_tmp_0.1 \
 -gi \
 -lang \
 -vq \
--tmp 0.1 \
+--temperature 1 \
 --vq_tiles 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
 --standard_split 28 \
 --lang_split 4 \
---bulk_split 0
---cnn intensities_spatial_softmax
-
-python3 train_lfp.py \
-disc_1024_tmp_1 \
---train_datasets unity/top_down_diverse_new  \
---test_datasetsunity/top_down_diverse_new_test \
--tfr \
--s GCS \
--d TPU \
--b 32 \
--la 2048 \
--le 2048 \
--lp 2048 \
--z 1024 \
--lr 3e-4 \
--B 0.0 \
--n 5 \
--t 1000000 \
--wmin 25 \
--wmax 50 \
--i \
--gi \
--lang \
--vq \
--tmp 1 \
---vq_tiles 5 \
---bucket_name=$BUCKET_NAME \
---tpu_name=$TPU_NAME \
---standard_split 28 \
---lang_split 4 \
---bulk_split 0
+--bulk_split 0 \
 --cnn intensities_spatial_softmax
 
 
