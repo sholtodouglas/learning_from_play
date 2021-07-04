@@ -184,7 +184,7 @@ class LFPTrainer():
         self.chkpt_manager = None
 
     def update_schedules(self, step):
-        self.temperature = self.temp_schedule(step)
+        self.temperature = self.temp_schedule.schedule(step)
 
     def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
         if self.args.num_distribs is not None:
