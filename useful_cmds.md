@@ -127,7 +127,7 @@ python3 augment_language_labelled_data.py --teleop_datasets unity/diverse --buck
 
 
 python3 train_lfp.py \
-disc_1024_0.1 \
+disc_1024_B1 \
 --train_datasets unity/top_down_diverse_new  \
 --test_datasets unity/top_down_diverse_new_test \
 -tfr \
@@ -148,8 +148,8 @@ disc_1024_0.1 \
 -gi \
 -lang \
 -vq \
--B 1
--tmp 0.1 \
+-B 1 \
+-tmp 1 \
 --vq_tiles 5 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \

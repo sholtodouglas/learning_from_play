@@ -183,7 +183,7 @@ class LFPTrainer():
 
         self.chkpt_manager = None
 
-    def update_schedules(step):
+    def update_schedules(self, step):
         self.temperature = self.temp_schedule(step)
 
     def compute_loss(self, labels, predictions, mask, seq_lens, weightings=None):
