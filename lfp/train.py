@@ -630,7 +630,7 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
     if args.gripper_images: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
         model_params['obs_dim'] += args.gripper_img_embedding_size 
     if args.images2: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
-        model_params['obs_dim'] += args. img_embedding_size 
+        model_params['obs_dim'] += args.img_embedding_size 
 
 
     
