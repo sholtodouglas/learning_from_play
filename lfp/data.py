@@ -19,7 +19,7 @@ dimensions = {'Unity': {'obs': 19,
                         'acts': 7,
                         'achieved_goals': 12, 
                         'achieved_goals_extra_info':uu.messaging.UNITY_MAX_AG_SIZE,
-                        'shoulder_img_hw':128,
+                        'shoulder_img_hw':200,
                         'hz': 25},
               'Pybullet': {'obs': 18,
                         'acts': 7,
@@ -39,7 +39,7 @@ def decode_gripper_img(image_data):
     image = tf.reshape(image, [64,64, 3]) # explicit size needed for TPU
     return image
 
-def read_tfrecord(include_imgs=False, include_gripper_imgs=False, sim='Unity'):
+def read_tfrecord(include_imgs=False,  include_imgs2 = False, include_gripper_imgs=False, sim='Unity'):
     def read_tfrecord_helper(example):
         LABELED_TFREC_FORMAT = {
             'obs': tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
@@ -50,6 +50,8 @@ def read_tfrecord(include_imgs=False, include_gripper_imgs=False, sim='Unity'):
         }
         if include_imgs:
             LABELED_TFREC_FORMAT['img'] = tf.io.FixedLenFeature([], tf.string) # tf.string means bytestring
+        if include_imgs2:
+            LABELED_TFREC_FORMAT['img2'] = tf.io.FixedLenFeature([], tf.string) # tf.string means bytestring
         if include_gripper_imgs:
             LABELED_TFREC_FORMAT['gripper_img'] = tf.io.FixedLenFeature([], tf.string) # tf.string means bytestring
 
@@ -68,6 +70,8 @@ def read_tfrecord(include_imgs=False, include_gripper_imgs=False, sim='Unity'):
         output['sequence_id'] = tf.cast(data['sequence_id'], tf.int32) # this is meant to be 32 even though you serialize as 64
         if include_imgs:
             output['img'] = decode_shoulder_img(data['img'], dimensions[sim]['shoulder_img_hw'])
+        if include_imgs2:
+            output['img2'] = decode_shoulder_img(data['img2'], dimensions[sim]['shoulder_img_hw'])
         if include_gripper_imgs:
             output['gripper_img'] = decode_gripper_img(data['gripper_img'])
 
@@ -98,14 +102,14 @@ def extract_npz(paths):
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     return dataset
 
-def extract_tfrecords(paths, include_imgs=False, include_gripper_imgs=False, sim='Unity', ordered=True, num_workers=1):
+def extract_tfrecords(paths, include_imgs=False, include_imgs2 = False, include_gripper_imgs=False, sim='Unity', ordered=True, num_workers=1):
     # In our case, order does matter
     tf_options = tf.data.Options()
     tf_options.experimental_deterministic = ordered  # must be 1 to maintain order while streaming from GCS
 
     dataset = tf.data.TFRecordDataset(paths, num_parallel_reads=1)
     dataset = dataset.with_options(tf_options)
-    dataset = dataset.map(read_tfrecord(include_imgs, include_gripper_imgs, sim), num_parallel_calls=num_workers)
+    dataset = dataset.map(read_tfrecord(include_imgs, include_imgs2, include_gripper_imgs, sim), num_parallel_calls=num_workers)
     return dataset
 
 
@@ -132,6 +136,7 @@ class PlayDataloader():
                 min_window_size=20,
                 window_shift=1,
                 include_imgs=False,
+                include_imgs2=False,
                 include_gripper_imgs=False,
                 shuffle_size=None, 
                 num_workers=tf.data.experimental.AUTOTUNE,
@@ -150,6 +155,7 @@ class PlayDataloader():
         self.window_size = window_size
         self.window_shift = window_shift
         self.include_imgs = include_imgs
+        self.include_imgs2 = include_imgs2
         self.include_gripper_imgs = include_gripper_imgs
         self.shuffle_size = int(batch_size * (window_size / window_shift))*10 if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
@@ -183,7 +189,7 @@ class PlayDataloader():
                 records = tf.io.gfile.glob(str(p/'tf_records/*.tfrecords'))
                 record_paths += [pth for pth in records if 'label' not in pth]
             random.shuffle(record_paths) # to ensure good mixing of different time periods of data (important in the bulk dataset)
-            dataset = extract_tfrecords(record_paths, self.include_imgs, self.include_gripper_imgs, self.sim, ordered=True, num_workers=self.num_workers)
+            dataset = extract_tfrecords(record_paths, self.include_imgs, self.include_imgs2, self.include_gripper_imgs, self.sim, ordered=True, num_workers=self.num_workers)
         else:
             dataset = extract_npz(paths)
         # self.print_minutes(dataset, self.sim)
@@ -226,8 +232,11 @@ class PlayDataloader():
 
         if self.include_imgs:
             return_dict['imgs'] = dataset['img'] # use this for the goal tiling on device
-            # Proprioceptive features are xyz, rpy, gripper angle
             return_dict['proprioceptive_features'] = obs[:7]
+        if self.include_imgs2:
+            return_dict['imgs2'] = dataset['img2'] # use this for the goal tiling on device
+            # Proprioceptive features are xyz, rpy, gripper angle
+            
         if self.include_gripper_imgs:
             return_dict['gripper_imgs'] = dataset['gripper_img']
         
@@ -286,15 +295,16 @@ from tensorflow.train import Example, Features, Feature
 
 def serialise_traj(data):
     
-    obs, acts, goals, seq_lens, masks, imgs , gripper_imgs, goal_imgs, proprioceptive_features, label, label_embedding, tag  = data['obs'], \
-    data['acts'], data['goals'], data['seq_lens'], data['masks'], data['imgs'], data['gripper_imgs'], data['goal_imgs'], data['proprioceptive_features'], data['label'], data['label_embedding'], data['tag']
+    # obs, acts, goals, seq_lens, masks, imgs ,imgs2, gripper_imgs, goal_imgs, proprioceptive_features, label, label_embedding, tag  = data['obs'], \
+    # data['acts'], data['goals'], data['seq_lens'], data['masks'], data['imgs'], data['imgs2'], data['gripper_imgs'], data['goal_imgs'], data['goal_imgs2'], data['proprioceptive_features'], data['label'], data['label_embedding'], data['tag']
     
     # obs (1, 40, 19)
     # acts (1, 40, 7)
     # goals (1, 40, 11)
     # seq_lens (1,)
     # masks (1, 40)
-    # imgs (1, 1, 128, 128, 3)
+    # imgs (1, 1, 200, 200, 3)
+    # imgs (1, 1, 200, 200, 3)
     # gripperimgs (1, 40, 64, 64, 3)
     # goal_imgs (1, 1, 128, 128, 3)
     # proprioceptive_features (1, 40, 7)
@@ -302,36 +312,45 @@ def serialise_traj(data):
     # label embedding [1,512]
     # tag string
 
-    
-    obs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(obs).numpy(),]))
-    acts = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(acts).numpy(),]))
-    goals = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goals).numpy(),]))
-    seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
-    masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
+    # obs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(obs).numpy(),]))
+    # acts = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(acts).numpy(),]))
+    # goals = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goals).numpy(),]))
+    # seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
+    # masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
 
-    imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
-    gripper_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(gripper_imgs).numpy(),]))
-    goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
-    proprioceptive_features = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(proprioceptive_features).numpy(),]))
-    label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
-    label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
-    tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
+    # imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
+    # imgs2 = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs2).numpy(),]))
+    # gripper_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(gripper_imgs).numpy(),]))
+    # goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
+    # goal_imgs2 = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs2).numpy(),]))
+    # proprioceptive_features = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(proprioceptive_features).numpy(),]))
+    # label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
+    # label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
+    # tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
     
-    features = Features(feature={
-              'obs':obs,
-              'acts':acts,
-              'goals':goals,
-              'seq_lens':seq_lens,
-              'masks':masks,
-              'imgs':imgs,
-              'gripper_imgs':gripper_imgs,
-              'goal_imgs':goal_imgs,
-              'proprioceptive_features':proprioceptive_features,
-              'label': label,
-              'label_embedding': label_embedding,
-              'tag': tag})
+    # features = Features(feature={
+    #           'obs':obs,
+    #           'acts':acts,
+    #           'goals':goals,
+    #           'seq_lens':seq_lens,
+    #           'masks':masks,
+    #           'imgs':imgs,
+    #           'imgs2':imgs2,
+    #           'gripper_imgs':gripper_imgs,
+    #           'goal_imgs':goal_imgs,
+    #           'goal_imgs2':goal_imgs2,
+    #           'proprioceptive_features':proprioceptive_features,
+    #           'label': label,
+    #           'label_embedding': label_embedding,
+    #           'tag': tag})
     
-    example = Example(features=features)
+    # example = Example(features=features)
+
+    features = {k: Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(v).numpy(),])) for k,v in data.items() if k not in ['seq_lens']}
+    features['seq_lens'] =  Feature(int64_list=Int64List(value=[data['seq_lens'],]))
+
+    example = Example(features=Features(feature=features))
+    
     
     return example.SerializeToString()
 
@@ -343,6 +362,7 @@ def read_traj_tfrecord(example):
             'seq_lens':tf.io.FixedLenFeature([], tf.int64),
             'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+            'imgs2':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'gripper_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
             'proprioceptive_features':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
@@ -358,8 +378,9 @@ def read_traj_tfrecord(example):
     seq_lens = tf.cast(data['seq_lens'], tf.int32) # this is meant to be 32 even though you serialize as 64
     masks = tf.io.parse_tensor(data['masks'], tf.float32) 
     imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)
+    imgs2 = tf.io.parse_tensor(data['imgs2'], tf.uint8)
     gripper_imgs = tf.io.parse_tensor(data['gripper_imgs'], tf.uint8)
-    goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)   
+    goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)     
     proprioceptive_features =tf.io.parse_tensor( data['proprioceptive_features'], tf.float32) 
     label = tf.io.parse_tensor(data['label'], tf.string)
     label_embedding = tf.io.parse_tensor(data['label_embedding'], tf.float32)
@@ -376,6 +397,7 @@ def read_traj_tfrecord(example):
               'seq_lens':seq_lens,
               'masks':masks,
               'imgs':imgs,
+              'imgs2':imgs2,
               'gripper_imgs':gripper_imgs,
               'goal_imgs':goal_imgs,
               'proprioceptive_features':proprioceptive_features,
@@ -463,37 +485,43 @@ class labelled_dl():
 ###################################################################
 def serialise_vid(data):
     
-    seq_lens, masks, imgs, goal_imgs,label, label_embedding, tag = data['seq_lens'], data['masks'], data['imgs'], data['goal_imgs'], data['label'], data['label_embedding'], data['tag']
+    # seq_lens, masks, imgs, goal_imgs,label, label_embedding, tag = data['seq_lens'], data['masks'], data['imgs'], data['goal_imgs'], data['label'], data['label_embedding'], data['tag']
     
+    features = {k: Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(v).numpy(),])) for k,v in data.items() if k not in ['seq_lens']}
+    features['seq_lens'] =  Feature(int64_list=Int64List(value=[data['seq_lens'],]))
 
-    # seq_lens (1,)
-    # masks (1, 40)
-    # imgs (1, 1, 128, 128, 3)
-    # goal_imgs (1, 1, 128, 128, 3)
-    # label string
-    # label embedding [1,512]
-    # tag string
-
-    seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
-    masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
-    imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
-    goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
-    label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
-    label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
-    tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
+    example = Example(features=Features(features))
     
-    features = Features(feature={
-              'seq_lens':seq_lens,
-              'masks':masks,
-              'imgs':imgs,
-              'goal_imgs':goal_imgs,
-              'label': label,
-              'label_embedding': label_embedding,
-              'tag': tag})
-    
-    example = Example(features=features)
     
     return example.SerializeToString()
+    # # seq_lens (1,)
+    # # masks (1, 40)
+    # # imgs (1, 1, 128, 128, 3)
+    # # goal_imgs (1, 1, 128, 128, 3)
+    # # label string
+    # # label embedding [1,512]
+    # # tag string
+
+    # seq_lens = Feature(int64_list=Int64List(value=[seq_lens,]))
+    # masks = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(masks).numpy(),])) 
+    # imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(imgs).numpy(),]))
+    # goal_imgs = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(goal_imgs).numpy(),]))
+    # label =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label).numpy(),]))
+    # label_embedding = Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(label_embedding).numpy(),]))
+    # tag =  Feature(bytes_list=BytesList(value=[tf.io.serialize_tensor(tag).numpy(),]))
+    
+    # features = Features(feature={
+    #           'seq_lens':seq_lens,
+    #           'masks':masks,
+    #           'imgs':imgs,
+    #           'goal_imgs':goal_imgs,
+    #           'label': label,
+    #           'label_embedding': label_embedding,
+    #           'tag': tag})
+    
+    # example = Example(features=features)
+    
+    # return example.SerializeToString()
 
 def read_vid(example):
     LABELED_TFREC_FORMAT = {
@@ -510,6 +538,7 @@ def read_vid(example):
     seq_lens = tf.cast(data['seq_lens'], tf.int32) # this is meant to be 32 even though you serialize as 64
     masks = tf.io.parse_tensor(data['masks'], tf.float32) 
     imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)
+    imgs2 = tf.io.parse_tensor(data['imgs2'], tf.uint8)
     goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
     label = tf.io.parse_tensor(data['label'], tf.string)
     label_embedding = tf.io.parse_tensor(data['label_embedding'], tf.float32)
@@ -519,6 +548,7 @@ def read_vid(example):
     return {  'seq_lens':seq_lens,
               'masks':masks,
               'imgs':imgs,
+              'imgs2':imgs2,
               'goal_imgs':goal_imgs,
               'labels': label,
               'label_embeddings':label_embedding,

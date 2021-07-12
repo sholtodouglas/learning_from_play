@@ -247,6 +247,8 @@ class LFPTrainer():
 
             if self.args.gripper_images:
                 batch['gripper_imgs'] *= imgs_mask # must be cast as int or this will be SLOW as it converts img to float
+            if self.args.images2:
+                batch['imgs2'] *= imgs_mask
         else:
             
             goals = tf.gather_nd(batch['goals'], B_indices)[:, tf.newaxis,:] # B, 1, achieved_goal_dim
@@ -353,11 +355,6 @@ class LFPTrainer():
             else:
                 goals = unlabelled_goal_embeddings
             # The above two will just be 0 if there is nothing from those batches
-
-            # B, T, D
-            goals = tf.tile(goals[:,tf.newaxis,:], [1, self.args.window_size_max, 1])
-            goals = goals * masks[:, :, tf.newaxis] # B, T, 1 (for broadcasting)
-
             if self.args.gripper_images:
                 if inputs is not None:
                     gripper_imgs = inputs['gripper_imgs']
@@ -371,6 +368,25 @@ class LFPTrainer():
                 gripper_imgs = tf.reshape(gripper_imgs, [B*T, H_g, W_g, C])
                 gripper_embeddings = tf.reshape(self.gripper_cnn(gripper_imgs)[0], [B, T, -1]) # should be [B, T, args.gripper_img_embedding_size]
                 states = tf.concat([states, gripper_embeddings], -1)
+            if self.args.images2:
+                if inputs is not None:
+                    imgs2 = inputs['imgs2']
+                if self.args.use_language and lang_labelled_inputs is not None:
+                    if inputs is None: # Get rid of this if else hell later TODO
+                        imgs2 = lang_labelled_inputs['imgs2']
+                    else:
+                        imgs2 = tf.concat([imgs2, lang_labelled_inputs['imgs2']], 0)
+
+                B_grip, _, H_g, W_g, C = imgs2.shape
+                imgs2 = tf.reshape(imgs2, [B*T, H_g, W_g, C])
+                imgs2_embedding = tf.reshape(self.cnn(imgs2)[0], [B, T, -1]) # should be [B, T, args.img_embedding_size]
+                states = tf.concat([states, imgs2_embedding], -1)
+
+            # B, T, D
+            goals = tf.tile(goals[:,tf.newaxis,:], [1, self.args.window_size_max, 1])
+            goals = goals * masks[:, :, tf.newaxis] # B, T, 1 (for broadcasting)
+
+            
 
 
 
@@ -613,6 +629,8 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
 
     if args.gripper_images: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
         model_params['obs_dim'] += args.gripper_img_embedding_size 
+    if args.images2: # separate this from args.images because pybullet sim doens't have a gripper cam in the collected data
+        model_params['obs_dim'] += args. img_embedding_size 
 
 
     
