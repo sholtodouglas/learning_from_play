@@ -557,7 +557,7 @@ def read_vid(example):
 ### Can use the labelled_dl with read_func = read_vid to read
 
 # create dataloader which combines the  datasets, and outputs next - makes them distributed if necessary. 
-# # This is so we can use TFrecord speed, but get the right proportions of various datasets (e.g a bulk pretraining one for extra data diversity)
+# This is so we can use TFrecord speed, but get the right proportions of various datasets (e.g a bulk pretraining one for extra data diversity)
 class distributed_data_coordinator:
     # load
 
@@ -588,8 +588,8 @@ class distributed_data_coordinator:
         if args.use_language: assert self.lang_split > 0
         
         ######################################### Train
-        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_imgs2 = args.images2, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-        self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
+        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min, shuffle_size=2)
+        self.dl_lang =  labelled_dl(sim = args.sim, shuffle_size=2) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
         
@@ -627,6 +627,3 @@ class distributed_data_coordinator:
         lang = next(self.lang_valid_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
         video = next(self.video_valid_dataset) if self.args.use_contrastive else tf.constant(0.0) # uing 0 constants as distribute strat hates none
         return {'batch': batch, 'lang': lang, 'video': video}
-
-
-
