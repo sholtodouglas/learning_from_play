@@ -157,7 +157,7 @@ class PlayDataloader():
         self.include_imgs = include_imgs
         self.include_imgs2 = include_imgs2
         self.include_gripper_imgs = include_gripper_imgs
-        self.shuffle_size = int(batch_size * (window_size / window_shift))*10 if shuffle_size is None else shuffle_size
+        self.shuffle_size = int(batch_size * (window_size / window_shift))*5 if shuffle_size is None else shuffle_size
         self.prefetch_size = tf.data.experimental.AUTOTUNE
         self.num_workers = num_workers
         self.seed = seed
@@ -428,7 +428,7 @@ class labelled_dl():
             sim = 'Unity',
             num_workers=4,
             batch_size=64,
-            shuffle_size=512,
+            shuffle_size=256,
             normalize=False,
             read_func=read_traj_tfrecord):
 
@@ -588,7 +588,7 @@ class distributed_data_coordinator:
         if args.use_language: assert self.lang_split > 0
         
         ######################################### Train
-        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min, shuffle_size=2)
+        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_imgs2 = args.images2, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min, shuffle_size=2)
         self.dl_lang =  labelled_dl(sim = args.sim, shuffle_size=2) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
