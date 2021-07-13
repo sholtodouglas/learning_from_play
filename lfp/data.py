@@ -627,3 +627,111 @@ class distributed_data_coordinator:
         lang = next(self.lang_valid_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
         video = next(self.video_valid_dataset) if self.args.use_contrastive else tf.constant(0.0) # uing 0 constants as distribute strat hates none
         return {'batch': batch, 'lang': lang, 'video': video}
+
+
+
+
+# def read_vid(example):
+#     LABELED_TFREC_FORMAT = {
+#             'seq_lens':tf.io.FixedLenFeature([], tf.int64),
+#             'masks':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+#             'imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+#             'goal_imgs':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+#             'label':tf.io.FixedLenFeature([], tf.string), # tf.string means bytestring,
+#             'label_embedding':tf.io.FixedLenFeature([], tf.string),
+#             'tag': tf.io.FixedLenFeature([], tf.string),
+#     }
+#     data = tf.io.parse_single_example(example, LABELED_TFREC_FORMAT)
+    
+#     seq_lens = tf.cast(data['seq_lens'], tf.int32) # this is meant to be 32 even though you serialize as 64
+#     masks = tf.io.parse_tensor(data['masks'], tf.float32) 
+#     imgs = tf.io.parse_tensor(data['imgs'], tf.uint8)
+#     imgs2 = tf.io.parse_tensor(data['imgs2'], tf.uint8)
+#     goal_imgs = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
+#     label = tf.io.parse_tensor(data['label'], tf.string)
+#     label_embedding = tf.io.parse_tensor(data['label_embedding'], tf.float32)
+#     tag = tf.io.parse_tensor(data['tag'], tf.string)
+    
+
+#     return {  'seq_lens':seq_lens,
+#               'masks':masks,
+#               'imgs':imgs,
+#               'imgs2':imgs2,
+#               'goal_imgs':goal_imgs,
+#               'labels': label,
+#               'label_embeddings':label_embedding,
+#               'tags': tag}
+
+# ### Can use the labelled_dl with read_func = read_vid to read
+
+# # create dataloader which combines the  datasets, and outputs next - makes them distributed if necessary. 
+# # This is so we can use TFrecord speed, but get the right proportions of various datasets (e.g a bulk pretraining one for extra data diversity)
+# class distributed_data_coordinator:
+#     # load
+
+#     def __init__(self,
+#         args,
+#         TRAIN_DATA_PATHS, # all data we have - these are lists of folder paths,
+#         TEST_DATA_PATHS,
+#         strategy,
+#         BULK_DATA_PATHS=[], # data we might want to emphaise in higher proportion - e.g if training for a standard viewpoint or environment
+#         VIDEO_DATA_PATHS=[],
+#         standard_split = 64,
+#         bulk_split = 0, # lets make these the actual number cause it needs to be 8 divisible - 
+#         lang_split = 0,
+#         video_split = 0,
+#         NUM_DEVICES = 8,
+#         ): # non-teleop, video only data
+
+#         self.args = args
+
+#         # bulk is like backup data that we won't have much of but enough for the diversity
+#         self.GLOBAL_BATCH_SIZE = args.batch_size * NUM_DEVICES
+#         # If we didn't set the split, assume everything in our main train/test DS
+#         if standard_split == 0: 
+#             standard_split = args.batch_size
+#         self.bulk_split, self.standard_split, self.lang_split, self.video_split = int(bulk_split* NUM_DEVICES), int(standard_split* NUM_DEVICES), int(lang_split* NUM_DEVICES), int(video_split* NUM_DEVICES)
+#         print(f"Our dataset split is {self.standard_split} specific, {self.lang_split} lang, {self.video_split} video, {self.bulk_split} bulk")
+#         assert (self.bulk_split+self.standard_split+self.lang_split+self.video_split) == self.GLOBAL_BATCH_SIZE
+#         if args.use_language: assert self.lang_split > 0
+        
+#         ######################################### Train
+#         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min, shuffle_size=4)
+#         self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
+#         self.standard_dataset =  iter(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split))
+#         self.bulk_dataset =  iter(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split)) if self.bulk_split > 0 else None
+        
+#         ######################################### Test
+#         valid_dataset = self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split+self.standard_split)
+#         self.valid_dataset = iter(valid_dataset)
+        
+#         ######################################### Plotting
+#         self.plotting_background_dataset = iter(self.dl.load(self.dl.extract(TEST_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=2)) #for the background in the cluster fig
+#         # For use with lang and plotting the colored dots
+#         tagged_dl = labelled_dl(label_type='tag', sim = args.sim)
+#         self.labelled_test_ds = iter(tagged_dl.load(tagged_dl.extract(TEST_DATA_PATHS)))
+
+#         ######################################### Language
+#         if args.use_language:
+#             self.lang_dataset =  iter(self.dl_lang.load(self.dl_lang.extract(TRAIN_DATA_PATHS+BULK_DATA_PATHS),  batch_size=self.lang_split))
+#             self.lang_valid_dataset =  iter(self.dl_lang.load(self.dl_lang.extract(TEST_DATA_PATHS),  batch_size=self.lang_split))
+#         else:
+#             train_dist_lang_dataset, valid_dist_lang_dataset = None, None
+        
+#         ######################################### Contrastive
+#         if args.use_contrastive:
+#             raise NotImplementedError
+        
+#     def next(self):
+#         batch = next(self.standard_dataset) 
+#         lang = next(self.lang_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+#         video = next(self.video_dataset) if self.args.use_contrastive else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+#         bulk = next(self.bulk_dataset)  if self.bulk_split > 0 else tf.constant(0.0) # combine batch and standard on device
+#         return {'batch':batch, 'lang':lang, 'video':video, 'bulk':bulk}
+
+#     def next_valid(self):
+#         batch = next(self.valid_dataset)
+#         # no standard - just test whatever we are validiating against
+#         lang = next(self.lang_valid_dataset) if self.args.use_language else tf.constant(0.0)  # uing 0 constants as distribute strat hates none
+#         video = next(self.video_valid_dataset) if self.args.use_contrastive else tf.constant(0.0) # uing 0 constants as distribute strat hates none
+#         return {'batch': batch, 'lang': lang, 'video': video}

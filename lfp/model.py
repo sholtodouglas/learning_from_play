@@ -354,7 +354,7 @@ class intensities_spatial_softmax_cnn(tf.keras.Model):
         self.img_channels = img_channels
         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
         self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu', name='c1')
-        self.conv2 = Conv2D(64, 4, strides=(4,4), padding='same', activation='relu', name='c2')
+        self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
         self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c3')
         # In between these, do a spatial softmax
         self.flatten = Flatten()
