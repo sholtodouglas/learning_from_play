@@ -588,7 +588,7 @@ class distributed_data_coordinator:
         if args.use_language: assert self.lang_split > 0
         
         ######################################### Train
-        self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_imgs2 = args.images2, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min, shuffle_size=2)
+        self.dl = PlayDataloader(shuffle_size=2, normalize=args.normalize, include_imgs = args.images, include_imgs2 = args.images2, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
         self.dl_lang =  labelled_dl(sim = args.sim, shuffle_size=2) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
