@@ -539,7 +539,7 @@ class distributed_data_coordinator:
         
         ######################################### Train
         self.dl = PlayDataloader(normalize=args.normalize, include_imgs = args.images, include_imgs2 = args.images2, include_gripper_imgs = args.gripper_images, sim=args.sim,  window_size=args.window_size_max, min_window_size=args.window_size_min)
-        self.dl_lang =  labelled_dl(sim = args.sim) # this is probably fine as it is preshuffled during creation
+        self.dl_lang =  labelled_dl(sim = args.sim, include_images = args.images, include_images2 = args.images2, include_gripper_images = args.gripper_images) # this is probably fine as it is preshuffled during creation
         self.standard_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(TRAIN_DATA_PATHS, from_tfrecords=args.from_tfrecords),  batch_size=self.standard_split)))
         self.bulk_dataset =  iter(strategy.experimental_distribute_dataset(self.dl.load(self.dl.extract(BULK_DATA_PATHS, from_tfrecords=args.from_tfrecords), batch_size=self.bulk_split))) if self.bulk_split > 0 else None
         
