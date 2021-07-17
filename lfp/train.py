@@ -644,16 +644,17 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
             model_params['enc_in_dim'] = model_params['obs_dim'] + model_params['act_dim']
         else:
             model_params['enc_in_dim'] = args.img_embedding_size
+        model_params['layer_size'] = args.planner_layer_size
         if args.discrete:
           encoder = lfp.model.create_discrete_encoder(**model_params)
           planner = lfp.model.create_discrete_planner(**model_params)
         else:
           encoder = lfp.model.create_encoder(**model_params)
           planner = lfp.model.create_planner(**model_params)
-          
-        model_params['layer_size'] = args.planner_layer_size
         
-
+        
+        
+    model_params['layer_size'] = args.actor_layer_size
     actor = lfp.model.create_actor(**model_params, gcbc=args.gcbc, num_distribs=args.num_distribs, qbits=args.qbits, discrete=args.discrete)
 
     cnn, gripper_cnn, img_embed_to_goal_space, lang_embed_to_goal_space = None, None, None, None
