@@ -336,8 +336,8 @@ def read_traj_tfrecord(include_imgs=False,  include_imgs2 = False, include_gripp
                 'seq_lens' : tf.cast(data['seq_lens'], tf.int32), # this is meant to be 32 even though you serialize as 64
                 'masks' : tf.io.parse_tensor(data['masks'], tf.float32),
                 'proprioceptive_features' :tf.io.parse_tensor( data['proprioceptive_features'], tf.float32),
-                'label' : tf.io.parse_tensor(data['label'], tf.string),
-                'label_embedding' : tf.io.parse_tensor(data['label_embedding'], tf.float32),
+                'labels' : tf.io.parse_tensor(data['label'], tf.string),
+                'label_embeddings' : tf.io.parse_tensor(data['label_embedding'], tf.float32),
                 'tags' : tf.io.parse_tensor(data['tag'], tf.string)
         }
         if include_imgs:

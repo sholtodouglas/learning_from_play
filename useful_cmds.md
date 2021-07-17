@@ -434,7 +434,7 @@ python3 train_lfp.py \
 
 
 python3 train_lfp.py \
-2048_b002_lim_intensities_spatial_softmax \
+2048_b001_lim_intensities_spatial_softmax \
 --train_datasets unity/augmented_diverse_new \
 --test_datasets unity/augmented_diverse_new_test \
 -tfr \
@@ -460,7 +460,61 @@ python3 train_lfp.py \
 --lang_split 4 \
 --bulk_split 0 \
 --cnn intensities_spatial_softmax \
--i2
+-i2 \
+-enc_all
+
+
+python3 train_lfp.py \
+2048_b001_lim_intensities_spatial_softmax \
+--train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
+--test_datasets pybullet/UR5_slow_gripper_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.01 \
+-n 5 \
+-t 1000000 \
+-wmin 20 \
+-wmax 40 \
+-i \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 32 \
+--lang_split 0 \
+--bulk_split 0 \
+--cnn intensities_spatial_softmax \
+-enc_all
+
+python3 train_lfp.py \
+2048_b001_states \
+--train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
+--test_datasets pybullet/UR5_slow_gripper_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 2048 \
+-lp 2048 \
+-z 256 \
+-lr 3e-4 \
+-B 0.01 \
+-n 5 \
+-t 1000000 \
+-wmin 20 \
+-wmax 40 \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 32 \
+--lang_split 0 \
+--bulk_split 0 \
+-enc_all
 
 
 mkdir data
