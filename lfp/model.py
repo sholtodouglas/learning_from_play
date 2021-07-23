@@ -300,13 +300,12 @@ class spatial_softmax_cnn(tf.keras.Model):
         self.img_width = img_width
         self.img_channels = img_channels
         self.rescaling = Rescaling(1./255, input_shape=(img_height, img_width, img_channels)) # put it here for portability
-        self.conv1 = Conv2D(32, 4, strides=(2,2), padding='same', activation='relu', name='c1')
+        self.conv1 = Conv2D(32, 8, strides=(4,4), padding='same', activation='relu', name='c1')
         self.conv2 = Conv2D(64, 4, strides=(2,2), padding='same', activation='relu', name='c2')
         self.conv3 = Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', name='c3')
-        self.conv4 = Conv2D(128, 3, strides=(1,1), padding='same', activation='relu', name='c4')
         # In between these, do a spatial softmax
         self.flatten = Flatten()
-        self.dense1 = Dense(256, activation='relu')
+        self.dense1 = Dense(512, activation='relu')
         self.dense2 = Dense(embedding_size)
         self.return_spatial_softmax = return_spatial_softmax
 
@@ -316,8 +315,8 @@ class spatial_softmax_cnn(tf.keras.Model):
         x = self.rescaling(inputs)
         x = self.conv1(x)
         x = self.conv2(x)
-        x = self.conv3(x)
-        pre_softmax = self.conv4(x)
+        pre_softmax = self.conv3(x)
+        # pre_softmax = self.conv4(x)
         
         # Assume features is of size [N, H, W, C] (batch_size, height, width, channels).
         # Transpose it to [N, C, H, W], then reshape to [N * C, H * W] to compute softmax

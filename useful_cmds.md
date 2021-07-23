@@ -31,7 +31,7 @@ export PROJECT_ID=learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm create lfp8 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
-gcloud alpha compute tpus tpu-vm ssh lfp7 --zone europe-west4-a --project learning-from-play-303306
+gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm delete lfp2 --zone=europe-west4-a
 
@@ -53,7 +53,9 @@ cd learning_from_play
 ./setup.sh
 mkdir data
 gsutil -m cp -r dir gs://$BUCKET_NAME/data/unity data
+
 ```
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/pybullet data
 # Run the sample training script for GCS setup
 
 ```
@@ -463,20 +465,20 @@ python3 train_lfp.py \
 -i2 \
 -enc_all
 
-
+gsutil -m cp -r dir gs://$BUCKET_NAME/data/pybullet data
 python3 train_lfp.py \
-2048_b001_lim_intensities_spatial_softmax \
+pybullet_2048_b001_spatial_softmax \
 --train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
 --test_datasets pybullet/UR5_slow_gripper_test \
 -tfr \
 -s LOCAL \
 -d TPU \
--b 32 \
+-b 64 \
 -la 2048 \
 -le 2048 \
 -lp 2048 \
 -z 256 \
--lr 3e-4 \
+-lr 2e-4 \
 -B 0.01 \
 -n 5 \
 -t 1000000 \
@@ -485,36 +487,39 @@ python3 train_lfp.py \
 -i \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 32 \
+--standard_split 64 \
 --lang_split 0 \
 --bulk_split 0 \
 --cnn intensities_spatial_softmax \
--enc_all
+-enc_all \
+-sim Pybullet
+
 
 python3 train_lfp.py \
-2048_b001_states \
+pybullet_2048_b002_states \
 --train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
 --test_datasets pybullet/UR5_slow_gripper_test \
 -tfr \
 -s LOCAL \
 -d TPU \
--b 32 \
+-b 256 \
 -la 2048 \
 -le 2048 \
 -lp 2048 \
 -z 256 \
 -lr 3e-4 \
--B 0.01 \
+-B 0.02 \
 -n 5 \
 -t 1000000 \
 -wmin 20 \
 -wmax 40 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 32 \
+--standard_split 256 \
 --lang_split 0 \
 --bulk_split 0 \
--enc_all
+-enc_all \
+-sim Pybullet
 
 
 mkdir data
