@@ -470,7 +470,7 @@ class LFPTrainer():
                     
 
 
-                z_plan_tiled = tf.repeat(plan, T//tiles, 1) # B,T,D 
+                z_plan_tiled = tf.repeat(plan, self.args.window_size_max//tiles, 1) # B,T,D 
                 
 
             else:
