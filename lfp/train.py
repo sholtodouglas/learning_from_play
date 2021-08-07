@@ -452,7 +452,7 @@ class LFPTrainer():
                 B,tiles,latent = encoding.shape
                 VQ_output = self.VQ(encoding, training=training)
                 encoding = tf.reshape(VQ_output['quantised'], (B,tiles,latent))
-                z_enc_tiled = tf.repeat(encoding, T//tiles, 1) # B,T,D
+                z_enc_tiled = tf.repeat(encoding, self.args.window_size_max//tiles, 1) # B,T,D
 
                 encoder_indices =  tf.reshape(VQ_output['indices'], (B, -1))
 
