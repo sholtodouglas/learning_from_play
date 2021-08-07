@@ -14,6 +14,7 @@ import argparse
 
 
 
+
 parser = argparse.ArgumentParser(description='LFP training arguments')
 parser.add_argument('run_name')
 parser.add_argument('--train_datasets', nargs='+', help='Training dataset names')
@@ -21,11 +22,11 @@ parser.add_argument('--test_datasets', nargs='+', help='Testing dataset names')
 parser.add_argument('--bulk_datasets', nargs='+', help='data diversity dataset names')
 parser.add_argument('--video_datasets', nargs='+', help='for contrastive learning')
 parser.add_argument('-c', '--colab', default=False, action='store_true', help='Enable if using colab environment')
-parser.add_argument('-s', '--data_source', default='GCS', help='Source of training data')
+parser.add_argument('-s', '--data_source', default='DRIVE', help='Source of training data')
 parser.add_argument('-tfr', '--from_tfrecords', default=False, action='store_true', help='Enable if using tfrecords format')
 parser.add_argument('-d', '--device', default='TPU', help='Hardware device to train on')
 parser.add_argument('-b', '--batch_size', default=512, type=int)
-parser.add_argument('-wmax', '--window_size_max', default=40, type=int)
+parser.add_argument('-wmax', '--window_size_max', default=50, type=int)
 parser.add_argument('-wmin', '--window_size_min', default=20, type=int)
 parser.add_argument('-la', '--actor_layer_size', default=2048, type=int, help='Layer size of actor, increases size of neural net')
 parser.add_argument('-le', '--encoder_layer_size', default=512, type=int, help='Layer size of encoder, increases size of neural net')
@@ -50,7 +51,8 @@ parser.add_argument('-cnn', '--cnn_type', type=str, default="spatial_softmax")
 parser.add_argument('-sim', '--sim', default='Unity', help='Unity/Pybullet')
 parser.add_argument('-vq', '--discrete', default=False, action='store_true')
 parser.add_argument('-tmp', '--temperature', type=float, default=0.1)
-parser.add_argument('--vq_tiles', type=int, default=5) # split into 5 tiles, must cleanly divide into max_seq_len
+parser.add_argument('--vq_reduction', type=int, default=5) # power of 2 by which the seq length is reduced to vq tiles
+parser.add_argument('--codebook_size', type=int, default=32) # power of 2 by which the seq length is reduced to vq tiles
 parser.add_argument('-nm', '--normalize', default=False, action='store_true')
 parser.add_argument('-lang', '--use_language', default=False, action='store_true')
 parser.add_argument('-cont', '--use_contrastive', default=False, action='store_true')
@@ -64,7 +66,6 @@ parser.add_argument('-ss', '--standard_split', type=int, default=0)
 parser.add_argument('-bs', '--bulk_split', type=int, default=0)
 parser.add_argument('-ls', '--lang_split', type=int, default=0)
 parser.add_argument('-vs', '--video_split', type=int, default=0)
-parser.add_argument('--init_from', type=str, default="")
 args = parser.parse_args()
 
 # Argument validation
