@@ -450,7 +450,7 @@ class LFPTrainer():
 
                 encoding = self.encoder([to_encode]) # [B, T, to_enc_dim]  > [B,VQ_tiles,latent_dim]
                 B,tiles,latent = encoding.shape
-                VQ_output = self.VQ.forward(encoding, training=training)
+                VQ_output = self.VQ(encoding, training=training)
                 encoding = tf.reshape(VQ_output['quantised'], (B,tiles,latent))
                 z_enc_tiled = tf.repeat(encoding, T//tiles, 1) # B,T,D
 

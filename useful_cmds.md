@@ -564,6 +564,7 @@ python3 train_lfp.py \
 vq \
 --train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
 --test_datasets pybullet/UR5_slow_gripper_test \
+-sim Pybullet \
 -tfr \
 -s LOCAL \
 -d TPU \
@@ -591,6 +592,7 @@ python3 train_lfp.py \
 vq_im \
 --train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
 --test_datasets pybullet/UR5_slow_gripper_test \
+-sim Pybullet \
 -tfr \
 -s LOCAL \
 -d TPU \
