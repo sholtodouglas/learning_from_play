@@ -704,7 +704,7 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
         model_params['layer_size'] = args.planner_layer_size
         if args.discrete:
           planner = lfp.model.conditional_transformer(args.codebook_size, max_len=args.window_size_max+2, embed_dim=args.latent_dim, num_heads=8, feed_forward_dim=args.planner_layer_size, num_layers=6)
-          model_params['reduction'] = args.vq_reduction
+          model_params['reductions'] = args.vq_reduction
           encoder = lfp.model.create_discrete_encoder(**model_params)
         else:
           encoder = lfp.model.create_encoder(**model_params)

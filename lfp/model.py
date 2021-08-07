@@ -147,7 +147,8 @@ def create_discrete_encoder(enc_in_dim, layer_size=128, latent_dim=64, reduction
     x = Masking(mask_value=0.)(inputs)
     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
-    for l in range(reductions):
+    for l in range(reductions-1):
+        print(l)
         x = Conv1D(layer_size, kernel_size=3, strides=2, padding="same")(x)
 
     embed = Conv1D(latent_dim, kernel_size=3, strides=2, padding="same")(x)
