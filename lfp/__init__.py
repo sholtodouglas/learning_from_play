@@ -9,3 +9,4 @@ from . import tests
 from . import train
 from . import utils
 from . import unity_utils
+from . import VQ

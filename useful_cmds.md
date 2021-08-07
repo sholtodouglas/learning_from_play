@@ -29,7 +29,7 @@ export PROJECT_ID=learning-from-play-303306
 
 
 
-gcloud alpha compute tpus tpu-vm create lfp8 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
+gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
 gcloud alpha compute tpus tpu-vm ssh lfp7 --zone europe-west4-a --project learning-from-play-303306
 
@@ -507,8 +507,8 @@ python3 train_lfp.py \
 -B 0.01 \
 -n 5 \
 -t 1000000 \
--wmin 20 \
--wmax 40 \
+-wmin 24 \
+-wmax 48 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
 --standard_split 32 \
@@ -549,3 +549,58 @@ disc_4096_0.1 \
 --lang_split 4 \
 --bulk_split 0 \
 --cnn intensities_spatial_softmax
+
+
+
+
+
+python3 train_lfp.py \
+vq \
+--train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
+--test_datasets pybullet/UR5_slow_gripper_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 256 \
+-la 2048 \
+-le 512 \
+-lp 512 \
+-z 64 \
+-n 5 \
+-t 1000000 \
+-wmin 24 \
+-wmax 48 \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 32 \
+--lang_split 0 \
+--bulk_split 0 \
+-enc_all
+-vq
+--codebook_size 256
+--vq_reduction 2
+
+
+python3 train_lfp.py \
+vq_im \
+--train_datasets pybullet/UR5 pybullet/UR5_high_transition pybullet/UR5_slow_gripper \
+--test_datasets pybullet/UR5_slow_gripper_test \
+-tfr \
+-s LOCAL \
+-d TPU \
+-b 32 \
+-la 2048 \
+-le 512 \
+-lp 512 \
+-z 64 \
+-n 5 \
+-t 1000000 \
+-wmin 24 \
+-wmax 48 \
+--bucket_name=$BUCKET_NAME \
+--tpu_name=$TPU_NAME \
+--standard_split 32 \
+--lang_split 0 \
+--bulk_split 0 \
+-enc_all
+-i

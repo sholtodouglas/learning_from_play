@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization, ReLU, Input, LSTM, Concatenate, Masking, Reshape, Lambda, \
-    Bidirectional, GRU, LayerNormalization, Bidirectional, Conv2D, MaxPooling2D, Flatten
+    Bidirectional, GRU, LayerNormalization, Bidirectional, Conv2D, Conv1D, MaxPooling2D, Flatten, LayerNormalization, Layer, Embedding, MultiHeadAttention, Dropout
 from tensorflow.keras.regularizers import l1, l2
 import tensorflow_probability as tfp
 tfd = tfp.distributions
@@ -127,17 +127,31 @@ def create_encoder(enc_in_dim,
     return Model([inputs], mixture)
 
 
-def create_discrete_encoder(enc_in_dim, layer_size=2048, latent_dim=1024, **kwargs):
+# def create_discrete_encoder(enc_in_dim, layer_size=2048, latent_dim=1024, **kwargs):
+#     # Input #
+#     inputs = Input(shape=(None, enc_in_dim), dtype=tf.float32, name='encoder_in')
+
+#     # Layers #
+#     x = Masking(mask_value=0.)(inputs)
+#     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
+#     x = Bidirectional(LSTM(layer_size, return_sequences=False), merge_mode='concat')(x)
+
+#     logits = Dense(latent_dim, name='to_vocab')(x)
+#     return Model([inputs], logits)
+
+def create_discrete_encoder(enc_in_dim, layer_size=128, latent_dim=64, reductions=3, **kwargs):
     # Input #
     inputs = Input(shape=(None, enc_in_dim), dtype=tf.float32, name='encoder_in')
 
     # Layers #
     x = Masking(mask_value=0.)(inputs)
     x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
-    x = Bidirectional(LSTM(layer_size, return_sequences=False), merge_mode='concat')(x)
+    x = Bidirectional(LSTM(layer_size, return_sequences=True), merge_mode='concat')(x)
+    for l in range(reductions):
+        x = Conv1D(layer_size, kernel_size=3, strides=2, padding="same")(x)
 
-    logits = Dense(latent_dim, name='to_vocab')(x)
-    return Model([inputs], logits)
+    embed = Conv1D(latent_dim, kernel_size=3, strides=2, padding="same")(x)
+    return Model([inputs], embed)
 
 
 def create_planner(obs_dim, goal_dim,
@@ -464,3 +478,135 @@ class deep_impala_cnn(impala_cnn):
 
 
 CNN_DICT= {'spatial_softmax': spatial_softmax_cnn, 'intensities_spatial_softmax': intensities_spatial_softmax_cnn, 'impala': impala_cnn, 'deep_impala': deep_impala_cnn}
+
+
+
+
+
+
+###############################################################################
+
+
+
+
+def causal_attention_mask(batch_size, n_dest, n_src, dtype):
+    """
+    Mask the upper half of the dot product matrix in self attention.
+    This prevents flow of information from future tokens to current token.
+    1's in the lower triangle, counting from the lower right corner.
+    """
+    i = tf.range(n_dest)[:, None]
+    j = tf.range(n_src)
+    m = i >= j - n_src + n_dest
+    mask = tf.cast(m, dtype)
+    mask = tf.reshape(mask, [1, n_dest, n_src])
+    mult = tf.concat(
+        [tf.expand_dims(batch_size, -1), tf.constant([1, 1], dtype=tf.int32)], 0
+    )
+    return tf.tile(mask, mult)
+
+
+class TransformerBlock(Layer):
+    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
+        super(TransformerBlock, self).__init__()
+        self.att = MultiHeadAttention(num_heads, embed_dim)
+        self.ffn = Sequential(
+            [Dense(ff_dim, activation="relu"), Dense(embed_dim),]
+        )
+        self.layernorm1 = LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = LayerNormalization(epsilon=1e-6)
+        self.dropout1 = Dropout(rate)
+        self.dropout2 = Dropout(rate)
+
+    def call(self, inputs):
+        input_shape = tf.shape(inputs)
+        batch_size = input_shape[0]
+        seq_len = input_shape[1]
+        causal_mask = causal_attention_mask(batch_size, seq_len, seq_len, tf.bool)
+        attention_output = self.att(inputs, inputs, attention_mask=causal_mask)
+        attention_output = self.dropout1(attention_output)
+        out1 = self.layernorm1(inputs + attention_output)
+        ffn_output = self.ffn(out1)
+        ffn_output = self.dropout2(ffn_output)
+        return self.layernorm2(out1 + ffn_output)
+    
+    
+class PositionEmbedding(Layer):
+    def __init__(self, maxlen, embed_dim):
+        super(PositionEmbedding, self).__init__()
+        self.pos_emb = Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def call(self, x):
+        maxlen = tf.shape(x)[-2]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        return x + positions
+    
+    
+# def create_conditional_transformer(vocab_size, max_len, embed_dim, num_heads, feed_forward_dim=256, num_layers=1):
+#     goal = Input(shape=(1, goal_dim,), dtype=tf.float32) # so that we can concat easily
+#     seq = Input(shape=(max_len,), dtype=tf.int32)
+    
+#     goal_embed = Dense(embed_dim, activation='relu', name='goal_embed')(goal) # convert the goal to the same embedding dim as the seq
+#     token_embeddings = Embedding(input_dim=vocab_size, output_dim=embed_dim)(seq) # embed the seq
+#     x = Concatenate(axis=-2)([goal_embed, token_embeddings])
+    
+#     # 
+#     embedding_layer = PositionEmbedding(max_len+1, embed_dim)
+#     x = embedding_layer(x)
+    
+#     for i in range(num_layers):
+#         x = TransformerBlock(embed_dim, num_heads, feed_forward_dim)(x)
+        
+#     outputs = Dense(vocab_size)(x)
+#     model = Model(inputs=[goal, seq], outputs={'logits': outputs, 'x':x})
+#     return model
+
+
+
+
+class conditional_transformer(Model):
+    # TODO: Make height width dependent
+    def __init__(self, vocab_size, max_len,embed_dim, num_heads, feed_forward_dim=256, num_layers=1):
+        super(conditional_transformer, self).__init__()
+        self.goal_embed = Dense(embed_dim, activation='relu', name='goal_embed')
+        self.state_embed = Dense(embed_dim, activation='relu', name='state_embed')
+        self.token_embeddings = Embedding(input_dim=vocab_size, output_dim=embed_dim)
+        self.embedding_layer = PositionEmbedding(max_len+1, embed_dim)
+        
+
+        self.tformer_layers = [TransformerBlock(embed_dim, num_heads, feed_forward_dim) for i in range(num_layers)]
+        self.outputs = Dense(vocab_size)
+
+    def expand(self, input):
+        if len(input.shape) == 2:
+            return input[:, tf.newaxis, :] # insert a time dim
+        elif len(input.shape) == 1:
+            return input[tf.newaxis, tf.newaxis, :]
+        
+       
+    def call(self, inputs):
+        current_state, goal, seq = inputs # seq should be 1, T (indices)
+        
+        current_state = self.expand(current_state)
+        goal = self.expand(goal)
+       
+        state_embed = self.state_embed(current_state)
+        goal_embed = self.goal_embed(goal)
+        
+        if seq is not None:
+            seq_embed = self.token_embeddings(seq)
+            x = Concatenate(axis=-2)([goal_embed, state_embed, seq_embed])
+        else:
+            x = Concatenate(axis=-2)([goal_embed, state_embed])
+            
+        x = self.embedding_layer(x)
+        
+        
+        for l in self.tformer_layers:
+            x = l(x)
+        
+        logits = self.outputs(x)
+        
+        
+        return {'logits': logits, 'x': x}

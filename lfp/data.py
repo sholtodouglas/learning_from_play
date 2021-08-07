@@ -342,9 +342,9 @@ def read_traj_tfrecord(include_imgs=False,  include_imgs2 = False, include_gripp
         }
         if include_imgs:
             traj['imgs'] = tf.io.parse_tensor(data['imgs'], tf.uint8)
-            traj['imgs2'] = tf.io.parse_tensor(data['imgs2'], tf.uint8)
+            traj['goal_imgs'] = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)
         if include_imgs2:
-            traj['goal_imgs'] = tf.io.parse_tensor(data['goal_imgs'], tf.uint8)     
+            traj['imgs2'] = tf.io.parse_tensor(data['imgs2'], tf.uint8)
         if include_gripper_imgs:
             traj['gripper_imgs'] = tf.io.parse_tensor(data['gripper_imgs'], tf.uint8)
 
@@ -382,7 +382,7 @@ class labelled_dl():
 
             self.num_workers = num_workers
             self.include_images = include_images
-            self.include_images2 = include_images
+            self.include_images2 = include_images2
             self.include_gripper_images = include_gripper_images
             self.sim = 'Unity'
             self.batch_size = batch_size

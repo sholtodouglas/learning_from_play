@@ -1,3 +1,4 @@
+
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -162,6 +163,11 @@ class LFPTrainer():
         self.metrics['train_discrete_planner_loss'] = tf.keras.metrics.Mean(name='train_discrete_planner_loss')
         self.metrics['valid_discrete_planner_loss'] = tf.keras.metrics.Mean(name='valid_discrete_planner_loss')
 
+        self.metrics['commitment_loss'] = tf.keras.metrics.Mean(name='commitment_loss')
+        self.metrics['entropy'] = tf.keras.metrics.Mean(name='entropy')
+        self.metrics['train_discrete_planner_acc'] = tf.keras.metrics.Mean(name='train_discrete_planner_acc')
+        self.metrics['valid_discrete_planner_acc'] = tf.keras.metrics.Mean(name='valid_discrete_planner_acc')
+
         self.metrics['valid_position_loss'] = tf.keras.metrics.Mean(name='valid_position_loss')
         self.metrics['valid_max_position_loss'] = lfp.metric.MaxMetric(name='valid_max_position_loss')
         self.metrics['valid_rotation_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
@@ -182,6 +188,9 @@ class LFPTrainer():
         self.metrics['valid_lang_gripper_loss'] = tf.keras.metrics.Mean(name='valid_rotation_loss')
 
         self.chkpt_manager = None
+
+        if self.args.discrete:
+            self.VQ  = lfp.VQ.VQ_EMA(self.args)  
 
     def update_schedules(self, step):
         self.temperature = self.temp_schedule.schedule(step)
@@ -259,7 +268,39 @@ class LFPTrainer():
         return batch
 
 
-    def step(self, inputs=None, lang_labelled_inputs=None, external_videos=None): # one of these must not be none, but either can be
+
+    def gumbel_softmax_quantise(self, to_encode, states, goals):
+        B,T,D = to_encode.shape
+        to_encode = tf.reshape(to_encode, [B*self.args.vq_tiles, T//self.args.vq_tiles, D])#  [B*TILES, LEN/TILES, EMBEDDING]
+        
+        encoding = self.encoder([to_encode]) # [B*TILES, LATENT] 
+        encoding = tf.reshape(encoding[:, :, tf.newaxis], [B, self.args.vq_tiles, -1]) # B, N_TILES, LATENT - so that each tile goes through the gumbel
+        
+        z_q = tfpl.DistributionLambda(
+                lambda logits: tfd.RelaxedOneHotCategorical(self.args.temperature, encoding)
+            )(encoding)
+        z_hard = tf.math.argmax(encoding, axis=-1)  # [B, N_TILES, LATENT]
+        
+        z_hard = tf.one_hot(z_hard, encoding.shape[-1], dtype=z_q.dtype)  # [B, N_TILES, LATENT]
+
+        z_enc = z_q + tf.stop_gradient(z_hard - z_q)
+        z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
+        z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
+
+        ## Planner
+        # Tile out start and goal as many times as there are vqtiles - TODO maybe better to use positional encoding and a static planner?
+        start_vq_tiled, goal_vq_tiled = tf.tile(states[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1]), tf.tile(goals[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1])
+        plan = self.planner([start_vq_tiled, goal_vq_tiled]) # B, VQ_TILES, D
+        
+        z_plan_hard =  tf.one_hot(tf.math.argmax(plan, axis=-1), plan.shape[-1], dtype=plan.dtype)  # B, VQ_TILES, D
+        
+        z_plan_tiled = tf.repeat(z_plan_hard, repeats = T//self.args.vq_tiles, axis= 1)  # B,T,D
+
+        return z_enc_tiled, z_plan_tiled
+
+
+
+    def step(self, inputs=None, lang_labelled_inputs=None, external_videos=None, training=False): # one of these must not be none, but either can be
         '''
         A function which wraps the shared processing between train and test step
         Maximally vectorises everything for speed's sake at the cost of some readability
@@ -291,7 +332,7 @@ class LFPTrainer():
             
             if inputs is not None:
             # [B_unlab,T,H,W,C], [B_unlab,T,D], [B_unlab,H,W,C]
-                imgs, proprioceptive_features, goal_imgs, = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
+                imgs, proprioceptive_features, goal_imgs = inputs['imgs'], inputs['proprioceptive_features'], inputs['goal_imgs']
             
             # Frankly only care about these in the context of images
             if self.args.use_language and lang_labelled_inputs is not None:
@@ -404,31 +445,33 @@ class LFPTrainer():
             if self.args.discrete:
                 # We want to chunk up the inputs, so each seq goes from B, LEN, EMBED to 
                 # that way the lstm encodes little chunks of the sequence
-                B,T,D = to_encode.shape
-                to_encode = tf.reshape(to_encode, [B*self.args.vq_tiles, T//self.args.vq_tiles, D])#  [B*TILES, LEN/TILES, EMBEDDING]
                 
-                encoding = self.encoder([to_encode]) # [B*TILES, LATENT] 
-                encoding = tf.reshape(encoding[:, :, tf.newaxis], [B, self.args.vq_tiles, -1]) # B, N_TILES, LATENT - so that each tile goes through the gumbel
-                
-                z_q = tfpl.DistributionLambda(
-                        lambda logits: tfd.RelaxedOneHotCategorical(self.args.temperature, encoding)
-                    )(encoding)
-                z_hard = tf.math.argmax(encoding, axis=-1)  # [B, N_TILES, LATENT]
-                
-                z_hard = tf.one_hot(z_hard, encoding.shape[-1], dtype=z_q.dtype)  # [B, N_TILES, LATENT]
+                # One option is to use gumbel, but for the moment that seems to be more unstable. 
 
-                z_enc = z_q + tf.stop_gradient(z_hard - z_q)
-                z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
-                z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
+                encoding = self.encoder([to_encode]) # [B, T, to_enc_dim]  > [B,VQ_tiles,latent_dim]
+                B,tiles,latent = encoding.shape
+                VQ_output = self.VQ.forward(encoding, training=training)
+                encoding = tf.reshape(VQ_output['quantised'], (B,tiles,latent))
+                z_enc_tiled = tf.repeat(encoding, T//tiles, 1) # B,T,D
 
-                ## Planner
-                # Tile out start and goal as many times as there are vqtiles - TODO maybe better to use positional encoding and a static planner?
-                start_vq_tiled, goal_vq_tiled = tf.tile(states[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1]), tf.tile(goals[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1])
-                plan = self.planner([start_vq_tiled, goal_vq_tiled]) # B, VQ_TILES, D
+                encoder_indices =  tf.reshape(VQ_output['indices'], (B, -1))
+
+                # NB: ATM THIS IS A LITTLE ANNOYING - MUST TAKE FROM N=1 BECAUSE WE HAVE TWO INPUTS BEFORE (GOAL AND STATE)
+                plan_logits = self.planner((states[:, 0, :], goals[:, 0, :],encoder_indices[:,:-1]))['logits'][:,1:] # [B, tiles, n_codebook_logits]
+
+                plan_indices = tf.argmax(tf.nn.softmax(plan_logits, -1), -1) # B, tiles 
+
+                plan = tf.reshape(self.VQ.quantise(plan_indices), (B, tiles, latent)) # [B, tiles, latent]
+
+                VQ_output['plan_logits'] = plan_logits
+                VQ_output['plan_codebook_indices'] = plan_indices
+                VQ_output['encoder_indices'] = encoder_indices
+
+                    
+
+
+                z_plan_tiled = tf.repeat(plan, T//tiles, 1) # B,T,D 
                 
-                z_plan_hard =  tf.one_hot(tf.math.argmax(plan, axis=-1), plan.shape[-1], dtype=plan.dtype)  # B, VQ_TILES, D
-                
-                z_plan_tiled = tf.repeat(z_plan_hard, repeats = T//self.args.vq_tiles, axis= 1)  # B,T,D
 
             else:
                 plan = self.planner([states[:, 0, :], goals[:, 0, :]])  # the final goals are tiled out over the entire non masked sequence, so the first timestep is the final goal.
@@ -437,10 +480,12 @@ class LFPTrainer():
                 z_plan = plan.sample()
                 z_enc_tiled = tf.tile(tf.expand_dims(z_enc, 1), (1, self.dl.window_size, 1))
                 z_plan_tiled = tf.tile(tf.expand_dims(z_plan, 1), (1, self.dl.window_size, 1))
+                VQ_output = None
 
             enc_policy = self.actor([states, z_enc_tiled, goals])
             plan_policy = self.actor([states, z_plan_tiled, goals])
-            return enc_policy, plan_policy, encoding, plan, indices, actions, masks, seq_lens, sentence_embeddings
+            return {'enc_policy': enc_policy, 'plan_policy': plan_policy, 'encoding': encoding, 'plan': plan, 'indices': indices,
+                         'actions': actions, 'masks': masks, 'seq_lens': seq_lens, 'sentence_embeddings': sentence_embeddings, 'VQ': VQ_output}
             # How is step used?
             # In the train and test functions below, where we use enc policy for logloss, plan policy for validation mae, encoding and plan for reg loss
                 # Additionally, for contrastive loss we need to get the encodings of the lang labelled and vids only, and their sentence embeddings
@@ -469,14 +514,19 @@ class LFPTrainer():
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
-                enc_policy, plan_policy, encoding, plan, indices, actions, mask, seq_lens, sentence_embeddings = self.step(inputs, lang_labelled_inputs, external_videos)
-                
+                step = self.step(inputs, lang_labelled_inputs, external_videos, training=True)
+                enc_policy, plan_policy, encoding, plan, actions, mask, seq_lens = step['enc_policy'], step['plan_policy'], step['encoding'], step['plan'], step['actions'], step['masks'], step['seq_lens']
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 if self.args.discrete:
-                    planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
-                    record(planner_loss, self.metrics['train_discrete_planner_loss'])
-                    loss = act_enc_loss + planner_loss * beta
+                    # planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
+                    # record(planner_loss, self.metrics['train_discrete_planner_loss'])
+                    record(lfp.VQ.entropy(step['VQ']['entropy']), self.metrics['entropy'])
+                    loss = act_enc_loss + record(step['VQ']['commitment_loss'], self.metrics['commitment_loss'])
 
+                    planner_decisions = tf.argmax(tf.nn.softmax(step['VQ']['plan_logits'] , -1), -1)
+                    planner_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.stop_gradient(step['VQ']['encoder_indices']), logits = step['VQ']['plan_logits']))
+                    train_plan_acc = record(tf.reduce_mean(tf.cast(planner_decisions == step['VQ']['encoder_indices'], tf.float32)), self.metrics['train_discrete_planner_acc'])
+                    loss += record(planner_loss, self.metrics['train_discrete_planner_loss'])
                 else:
                     act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['train_act_with_plan_loss'])
                     reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['train_reg_loss'])
@@ -546,13 +596,20 @@ class LFPTrainer():
             log_action_breakdown(policy, actions, mask, seq_lens, self.args.num_distribs is not None, self.dl.quaternion_act, self.valid_position_loss, self.valid_max_position_loss, \
                                  self.valid_rotation_loss, self.valid_max_rotation_loss, self.valid_gripper_loss, self.compute_MAE)
         else:
-            enc_policy, plan_policy, encoding, plan, indices, actions, mask, seq_lens, sentence_embeddings = self.step(inputs, lang_labelled_inputs, external_videos)
+            step = self.step(inputs, lang_labelled_inputs, external_videos)
+            enc_policy, plan_policy, encoding, plan, actions, mask, seq_lens, indices = step['enc_policy'], step['plan_policy'], step['encoding'], step['plan'], step['actions'], step['masks'], step['seq_lens'], step['indices']
+
+
             act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['valid_act_with_enc_loss'])
             
             if self.args.discrete:
-                planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
-                record(planner_loss, self.metrics['valid_discrete_planner_loss'])
-                loss = act_enc_loss + planner_loss * beta
+                record(lfp.VQ.entropy(step['VQ']['entropy']), self.metrics['entropy'])
+                loss = act_enc_loss + record(step['VQ']['commitment_loss'], self.metrics['commitment_loss'])
+
+                planner_decisions = tf.argmax(tf.nn.softmax(step['VQ']['plan_logits'] , -1), -1)
+                planner_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.stop_gradient(step['VQ']['encoder_indices']), logits = step['VQ']['plan_logits']))
+                valid_plan_acc = record(tf.reduce_mean(tf.cast(planner_decisions == step['VQ']['encoder_indices'], tf.float32)), self.metrics['valid_discrete_planner_acc'])
+                loss += record(planner_loss, self.metrics['valid_discrete_planner_loss'])
             else:
                 act_plan_loss = record(self.compute_loss(actions, plan_policy, mask, seq_lens), self.metrics['valid_act_with_plan_loss'])
                 reg_loss = record(self.compute_regularisation_loss(plan, encoding), self.metrics['valid_reg_loss'])
@@ -646,8 +703,9 @@ def train_setup(args, dl, GLOBAL_BATCH_SIZE, strategy):
             model_params['enc_in_dim'] = args.img_embedding_size
         model_params['layer_size'] = args.planner_layer_size
         if args.discrete:
+          planner = lfp.model.conditional_transformer(args.codebook_size, max_len=args.window_size_max+2, embed_dim=args.latent_dim, num_heads=8, feed_forward_dim=args.planner_layer_size, num_layers=6)
+          model_params['reduction'] = args.vq_reduction
           encoder = lfp.model.create_discrete_encoder(**model_params)
-          planner = lfp.model.create_discrete_planner(**model_params)
         else:
           encoder = lfp.model.create_encoder(**model_params)
           planner = lfp.model.create_planner(**model_params)
