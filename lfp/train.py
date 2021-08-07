@@ -134,6 +134,7 @@ class LFPTrainer():
         self.gripper_cnn_optimizer =  optimizer(learning_rate=args.learning_rate, clipnorm=gripper_cnn_clip)
         self.img_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
         self.lang_embed_to_goal_space_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=mapper_clip)
+        self.VQ_optimizer = optimizer(learning_rate=args.learning_rate, clipnorm=encoder_clip)
 
         self.nll_action_loss = lambda y, p_y: tf.reduce_sum(-p_y.log_prob(y), axis=2)
         self.mae_action_loss = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
@@ -149,6 +150,7 @@ class LFPTrainer():
         self.metrics['gripper_cnn_grad_norm'] = tf.keras.metrics.Mean(name='gripper_cnn_grad_norm')
         self.metrics['img_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='img_embed_to_goal_space_norm')
         self.metrics['lang_embed_to_goal_space_norm'] = tf.keras.metrics.Mean(name='lang_embed_to_goal_space_norm')
+        self.metrics['VQ_grad_norm'] = tf.keras.metrics.Mean(name='VQ_grad_norm')
 
         self.metrics['global_grad_norm'] = tf.keras.metrics.Mean(name='global_grad_norm')
 
@@ -190,7 +192,10 @@ class LFPTrainer():
         self.chkpt_manager = None
 
         if self.args.discrete:
-            self.VQ  = lfp.VQ.VQ_EMA(self.args)  
+            if self.args.vq_ema:
+                self.VQ  = lfp.VQ.VQ_EMA(self.args)  
+            else:
+                self.VQ = lfp.VQ.VQ_GRAD(self.args)
 
     def update_schedules(self, step):
         self.temperature = self.temp_schedule.schedule(step)
@@ -505,7 +510,7 @@ class LFPTrainer():
         inputs = self.make_sequences_variable_length(inputs) 
 
         with tf.GradientTape() as actor_tape, tf.GradientTape() as encoder_tape, tf.GradientTape() as planner_tape, tf.GradientTape() as cnn_tape, tf.GradientTape() as gripper_cnn_tape,\
-                                tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape:
+                                tf.GradientTape() as img_goal_embed_tape, tf.GradientTape() as lang_goal_embed_tape, tf.GradientTape() as VQ_tape:
 
 
             if self.args.gcbc:
@@ -550,6 +555,7 @@ class LFPTrainer():
                         img_goal_to_goal_space_grads = img_goal_embed_tape.gradient(loss, self.img_embed_to_goal_space.trainable_variables)
                     if self.args.gripper_images: gripper_cnn_gradients = gripper_cnn_tape.gradient(loss, self.gripper_cnn.trainable_variables)
                     if self.args.use_language: lang_goal_to_goal_space_grads = lang_goal_embed_tape.gradient(loss, self.lang_embed_to_goal_space.trainable_variables)
+                    if self.args.discrete and not self.args.vq_ema: VQ_gradients = VQ_tape.gradient(loss, [self.VQ.codebook])
 
 
                 #################### Calc indivual norms
@@ -561,7 +567,7 @@ class LFPTrainer():
                     img_goal_to_goal_space_norm = record(tf.linalg.global_norm(img_goal_to_goal_space_grads), self.metrics['img_embed_to_goal_space_norm'])
                 if self.args.gripper_images: gripper_cnn_norm = record(tf.linalg.global_norm(gripper_cnn_gradients), self.metrics['gripper_cnn_grad_norm'])
                 if self.args.use_language: lang_goal_to_goal_space_norm = record(tf.linalg.global_norm(lang_goal_to_goal_space_grads), self.metrics['lang_embed_to_goal_space_norm'])
-
+                if self.args.discrete and  self.args.vq_ema:  record(tf.linalg.global_norm(VQ_gradients), self.metrics['VQ_grad_norm'])
                 ##################### Calc global grad norm
                 gradients = actor_gradients + encoder_gradients + planner_gradients
                 if self.args.images: gradients = gradients + cnn_gradients + img_goal_to_goal_space_grads
@@ -578,6 +584,7 @@ class LFPTrainer():
                     self.img_embed_to_goal_space_optimizer.apply_gradients(zip(img_goal_to_goal_space_grads, self.img_embed_to_goal_space.trainable_variables))
                 if self.args.gripper_images: self.gripper_cnn_optimizer.apply_gradients(zip(gripper_cnn_gradients, self.gripper_cnn.trainable_variables))
                 if self.args.use_language: self.lang_embed_to_goal_space_optimizer.apply_gradients(zip(lang_goal_to_goal_space_grads, self.lang_embed_to_goal_space.trainable_variables))
+                if self.args.discrete and not self.args.vq_ema:   self.VQ_optimizer.apply_gradients(zip(VQ_gradients, [self.VQ.codebook]))
                 ################### Fin
                         
 
