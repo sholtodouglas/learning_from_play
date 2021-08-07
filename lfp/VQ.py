@@ -22,14 +22,14 @@ def nansum(x):
 def entropy(p):
     return nansum(-p * log2(p))
 
-class VQ_EMA():
+class VQ_EMA(tf.keras.Model):
     
     def __init__(self, args, commitment_cost= 1.0, gamma=0.99, epsilon=1e-9):
         self.args = args
         embedding_shape = (args.latent_dim, args.codebook_size)
         input_size = np.product(embedding_shape[:-1])
         max_val = np.sqrt(3 / input_size) * 1.0 # scale 1.0
-        self.codebook = tf.random.uniform(embedding_shape, -max_val, max_val)
+        self.codebook = tf.Variable(tf.random.uniform(embedding_shape, -max_val, max_val))
         self.gamma = gamma
         self.commitment_cost = commitment_cost
         self.epsilon = epsilon
@@ -55,7 +55,7 @@ class VQ_EMA():
         '''
         return tf.gather_nd(tf.transpose(self.codebook),tf.transpose(indices[tf.newaxis,:]))
         
-    def forward(self, z, training=False, record_codebook=False):
+    def call(self, z, training=False, record_codebook=False):
         '''
         Takes in a series of z, does the full forward pass
         '''

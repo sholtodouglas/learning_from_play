@@ -578,7 +578,7 @@ vq \
 -wmax 48 \
 --bucket_name=$BUCKET_NAME \
 --tpu_name=$TPU_NAME \
---standard_split 32 \
+--standard_split 256 \
 --lang_split 0 \
 --bulk_split 0 \
 -enc_all \
