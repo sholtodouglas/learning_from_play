@@ -25,6 +25,7 @@ def entropy(p):
 class VQ_EMA(tf.keras.Model):
     
     def __init__(self, args, commitment_cost= 1.0, gamma=0.99, epsilon=1e-9):
+        super(VQ_EMA, self).__init__()
         self.args = args
         embedding_shape = (args.latent_dim, args.codebook_size)
         input_size = np.product(embedding_shape[:-1])
