@@ -135,8 +135,8 @@ class VQ_GRAD(tf.keras.Model):
         e_latent_loss = tf.reduce_mean((tf.stop_gradient(quantised) - flattened_inputs)**2)
         
         latent_loss  = tf.reduce_mean((quantised - tf.stop_gradient(flattened_inputs))**2)
-        
-        commitment_loss = latent_loss + self.commitment_cost * e_latent_loss
+        commitment_loss = self.commitment_cost * e_latent_loss
+        loss = latent_loss + commitment_loss
         
         # straight through estimator
         quantised = flattened_inputs + tf.stop_gradient(quantised-flattened_inputs)
@@ -149,4 +149,4 @@ class VQ_GRAD(tf.keras.Model):
             self.commitment_loss_history.append(commitment_loss)
             self.entropy_history.append(entropy(avg_probs))
         
-        return {'quantised': quantised, 'commitment_loss':commitment_loss, 'entropy': avg_probs, 'indices': indices}
+        return {'quantised': quantised, 'commitment_loss':loss, 'entropy': avg_probs, 'indices': indices}

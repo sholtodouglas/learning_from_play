@@ -55,6 +55,7 @@ parser.add_argument('--vq_ema', default=False, action='store_true')
 parser.add_argument('-tmp', '--temperature', type=float, default=0.1)
 parser.add_argument('--vq_reduction', type=int, default=5) # power of 2 by which the seq length is reduced to vq tiles
 parser.add_argument('--codebook_size', type=int, default=32) # power of 2 by which the seq length is reduced to vq tiles
+parser.add_argument('--commit_cost', type=float, default=10.0)
 parser.add_argument('-nm', '--normalize', default=False, action='store_true')
 parser.add_argument('-lang', '--use_language', default=False, action='store_true')
 parser.add_argument('-cont', '--use_contrastive', default=False, action='store_true')

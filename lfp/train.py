@@ -193,9 +193,9 @@ class LFPTrainer():
 
         if self.args.discrete:
             if self.args.vq_ema:
-                self.VQ  = lfp.VQ.VQ_EMA(self.args)  
+                self.VQ  = lfp.VQ.VQ_EMA(self.args, commitment_cost=args.commit_cost)  
             else:
-                self.VQ = lfp.VQ.VQ_GRAD(self.args)
+                self.VQ = lfp.VQ.VQ_GRAD(self.args,  commitment_cost=args.commit_cost)
 
     def update_schedules(self, step):
         self.temperature = self.temp_schedule.schedule(step)
@@ -526,6 +526,7 @@ class LFPTrainer():
                     # planner_loss = tf.nn.softmax_cross_entropy_with_logits(labels = tf.stop_gradient(tf.nn.softmax(encoding,-1)), logits=plan)
                     # record(planner_loss, self.metrics['train_discrete_planner_loss'])
                     record(lfp.VQ.entropy(step['VQ']['entropy']), self.metrics['entropy'])
+
                     loss = act_enc_loss + record(step['VQ']['commitment_loss'], self.metrics['commitment_loss'])
 
                     planner_decisions = tf.argmax(tf.nn.softmax(step['VQ']['plan_logits'] , -1), -1)
@@ -567,7 +568,7 @@ class LFPTrainer():
                     img_goal_to_goal_space_norm = record(tf.linalg.global_norm(img_goal_to_goal_space_grads), self.metrics['img_embed_to_goal_space_norm'])
                 if self.args.gripper_images: gripper_cnn_norm = record(tf.linalg.global_norm(gripper_cnn_gradients), self.metrics['gripper_cnn_grad_norm'])
                 if self.args.use_language: lang_goal_to_goal_space_norm = record(tf.linalg.global_norm(lang_goal_to_goal_space_grads), self.metrics['lang_embed_to_goal_space_norm'])
-                if self.args.discrete and  self.args.vq_ema:  record(tf.linalg.global_norm(VQ_gradients), self.metrics['VQ_grad_norm'])
+                if self.args.discrete and  not self.args.vq_ema:  record(tf.linalg.global_norm(VQ_gradients), self.metrics['VQ_grad_norm'])
                 ##################### Calc global grad norm
                 gradients = actor_gradients + encoder_gradients + planner_gradients
                 if self.args.images: gradients = gradients + cnn_gradients + img_goal_to_goal_space_grads
@@ -578,7 +579,7 @@ class LFPTrainer():
                 #################### Apply optimizer updates
                 self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
                 self.encoder_optimizer.apply_gradients(zip(encoder_gradients, self.encoder.trainable_variables))
-                if not self.args.discrete: self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables)) # TODO TRAIN AS SECOND STAGE
+                self.planner_optimizer.apply_gradients(zip(planner_gradients, self.planner.trainable_variables))
                 if self.args.images: 
                     self.cnn_optimizer.apply_gradients(zip(cnn_gradients, self.cnn.trainable_variables))
                     self.img_embed_to_goal_space_optimizer.apply_gradients(zip(img_goal_to_goal_space_grads, self.img_embed_to_goal_space.trainable_variables))

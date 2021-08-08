@@ -610,8 +610,8 @@ vq_im \
 --standard_split 32 \
 --lang_split 0 \
 --bulk_split 0 \
--enc_all
--i
--vq
---codebook_size 256
---vq_reduction 2
+-enc_all \
+-i \
+-vq \
+--codebook_size 256 \
+--vq_reduction 2 \
