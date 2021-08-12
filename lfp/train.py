@@ -274,38 +274,38 @@ class LFPTrainer():
 
 
 
-    def gumbel_softmax_quantise(self, to_encode, states, goals):
-        B,T,D = to_encode.shape
-        to_encode = tf.reshape(to_encode, [B*self.args.vq_tiles, T//self.args.vq_tiles, D])#  [B*TILES, LEN/TILES, EMBEDDING]
+    # def gumbel_softmax_quantise(self, to_encode, states, goals):
+    #     B,T,D = to_encode.shape
+    #     to_encode = tf.reshape(to_encode, [B*self.args.vq_tiles, T//self.args.vq_tiles, D])#  [B*TILES, LEN/TILES, EMBEDDING]
         
-        encoding = self.encoder([to_encode]) # [B*TILES, LATENT] 
-        encoding = tf.reshape(encoding[:, :, tf.newaxis], [B, self.args.vq_tiles, -1]) # B, N_TILES, LATENT - so that each tile goes through the gumbel
+    #     encoding = self.encoder([to_encode]) # [B*TILES, LATENT] 
+    #     encoding = tf.reshape(encoding[:, :, tf.newaxis], [B, self.args.vq_tiles, -1]) # B, N_TILES, LATENT - so that each tile goes through the gumbel
         
-        z_q = tfpl.DistributionLambda(
-                lambda logits: tfd.RelaxedOneHotCategorical(self.args.temperature, encoding)
-            )(encoding)
-        z_hard = tf.math.argmax(encoding, axis=-1)  # [B, N_TILES, LATENT]
+    #     z_q = tfpl.DistributionLambda(
+    #             lambda logits: tfd.RelaxedOneHotCategorical(self.args.temperature, encoding)
+    #         )(encoding)
+    #     z_hard = tf.math.argmax(encoding, axis=-1)  # [B, N_TILES, LATENT]
         
-        z_hard = tf.one_hot(z_hard, encoding.shape[-1], dtype=z_q.dtype)  # [B, N_TILES, LATENT]
+    #     z_hard = tf.one_hot(z_hard, encoding.shape[-1], dtype=z_q.dtype)  # [B, N_TILES, LATENT]
 
-        z_enc = z_q + tf.stop_gradient(z_hard - z_q)
-        z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
-        z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
+    #     z_enc = z_q + tf.stop_gradient(z_hard - z_q)
+    #     z_enc = tf.reshape(z_enc, [B, self.args.vq_tiles, -1]) # Get it back down to batch, Tiles*Encoding where each _ is a tile but in one concatted vector now
+    #     z_enc_tiled = tf.repeat(z_enc, repeats = T//self.args.vq_tiles, axis= 1) # tile out the discrete plans so the first 1 corresponds to the first N steps etc
 
-        ## Planner
-        # Tile out start and goal as many times as there are vqtiles - TODO maybe better to use positional encoding and a static planner?
-        start_vq_tiled, goal_vq_tiled = tf.tile(states[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1]), tf.tile(goals[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1])
-        plan = self.planner([start_vq_tiled, goal_vq_tiled]) # B, VQ_TILES, D
+    #     ## Planner
+    #     # Tile out start and goal as many times as there are vqtiles - TODO maybe better to use positional encoding and a static planner?
+    #     start_vq_tiled, goal_vq_tiled = tf.tile(states[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1]), tf.tile(goals[:,0,:][:,tf.newaxis,:], [1, self.args.vq_tiles, 1])
+    #     plan = self.planner([start_vq_tiled, goal_vq_tiled]) # B, VQ_TILES, D
         
-        z_plan_hard =  tf.one_hot(tf.math.argmax(plan, axis=-1), plan.shape[-1], dtype=plan.dtype)  # B, VQ_TILES, D
+    #     z_plan_hard =  tf.one_hot(tf.math.argmax(plan, axis=-1), plan.shape[-1], dtype=plan.dtype)  # B, VQ_TILES, D
         
-        z_plan_tiled = tf.repeat(z_plan_hard, repeats = T//self.args.vq_tiles, axis= 1)  # B,T,D
+    #     z_plan_tiled = tf.repeat(z_plan_hard, repeats = T//self.args.vq_tiles, axis= 1)  # B,T,D
 
-        return z_enc_tiled, z_plan_tiled
+    #     return z_enc_tiled, z_plan_tiled
 
 
 
-    def step(self, inputs=None, lang_labelled_inputs=None, external_videos=None, training=False): # one of these must not be none, but either can be
+    def step(self, inputs=None, lang_labelled_inputs=None, external_videos=None): # one of these must not be none, but either can be
         '''
         A function which wraps the shared processing between train and test step
         Maximally vectorises everything for speed's sake at the cost of some readability
@@ -455,7 +455,7 @@ class LFPTrainer():
 
                 encoding = self.encoder([to_encode]) # [B, T, to_enc_dim]  > [B,VQ_tiles,latent_dim]
                 B,tiles,latent = encoding.shape
-                VQ_output = self.VQ(encoding, training=training)
+                VQ_output = self.VQ(encoding)
                 encoding = tf.reshape(VQ_output['quantised'], (B,tiles,latent))
                 z_enc_tiled = tf.repeat(encoding, self.args.window_size_max//tiles, 1) # B,T,D
 
@@ -519,7 +519,7 @@ class LFPTrainer():
                 gradients = actor_tape.gradient(loss, self.actor.trainable_variables)
                 self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
             else:
-                step = self.step(inputs, lang_labelled_inputs, external_videos, training=True)
+                step = self.step(inputs, lang_labelled_inputs, external_videos)
                 enc_policy, plan_policy, encoding, plan, actions, mask, seq_lens = step['enc_policy'], step['plan_policy'], step['encoding'], step['plan'], step['actions'], step['masks'], step['seq_lens']
                 act_enc_loss = record(self.compute_loss(actions, enc_policy, mask, seq_lens), self.metrics['train_act_with_enc_loss'])
                 if self.args.discrete:
@@ -587,9 +587,13 @@ class LFPTrainer():
                 if self.args.use_language: self.lang_embed_to_goal_space_optimizer.apply_gradients(zip(lang_goal_to_goal_space_grads, self.lang_embed_to_goal_space.trainable_variables))
                 if self.args.discrete and not self.args.vq_ema:   self.VQ_optimizer.apply_gradients(zip(VQ_gradients, [self.VQ.codebook]))
                 ################### Fin
-                        
 
-        return record(loss, self.metrics['train_loss'])
+        return_dict = {'loss':  record(loss, self.metrics['train_loss'])}         
+        if self.args.discrete and self.args.vq_ema:
+               return_dict['flattened_inputs'] = step['VQ']['flattened_inputs']
+               return_dict['encodings'] = step['VQ']['encodings']
+
+        return return_dict
 
 
     def test_step(self, **kwargs):
@@ -633,12 +637,13 @@ class LFPTrainer():
                 self.metrics['valid_lang_position_loss'], self.metrics['valid_lang_max_position_loss'], self.metrics['valid_lang_rotation_loss'], self.metrics['valid_lang_max_rotation_loss'], \
                     self.metrics['valid_lang_gripper_loss'], self.compute_MAE)
 
-        return record(loss,self.metrics['valid_loss'])
+        return {'loss': record(loss,self.metrics['valid_loss'])}
 
 
     @tf.function
     def distributed_train_step(self,inputs):
         per_replica_losses = self.strategy.run(self.train_step, kwargs=inputs)
+        print(per_replica_losses)
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 

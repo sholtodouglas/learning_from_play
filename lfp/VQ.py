@@ -86,7 +86,7 @@ class VQ_EMA(tf.keras.Model):
             self.commitment_loss_history.append(commitment_loss)
             self.entropy_history.append(entropy(avg_probs))
         
-        return {'quantised': quantised, 'commitment_loss':commitment_loss, 'entropy': avg_probs, 'indices': indices}
+        return {'quantised': quantised, 'commitment_loss':commitment_loss, 'entropy': avg_probs, 'indices': indices, 'flattened_inputs': flattened_inputs, 'encodings':encodings}
     
     def plot_codebook_history(self):
         plt.rcParams["figure.figsize"] = (20, 5)

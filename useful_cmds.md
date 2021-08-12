@@ -585,7 +585,8 @@ vq \
 -enc_all \
 -vq \
 --codebook_size 256 \
---vq_reduction 2
+--vq_reduction 1 \
+--commit_cost 10
 
 
 python3 train_lfp.py \
