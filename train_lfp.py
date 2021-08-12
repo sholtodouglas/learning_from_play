@@ -238,7 +238,7 @@ while t < args.train_steps:
     inputs = dataset_coordinator.next()
     inputs['beta'] = args.beta
     r = trainer.distributed_train_step(inputs)
-    print(r['encodings'])
+    trainer.VQ.update_codebook(r['flattened_inputs'], r['encodings'])
 
     if t % valid_inc == 0:
 
