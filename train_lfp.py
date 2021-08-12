@@ -237,7 +237,8 @@ while t < args.train_steps:
     trainer.update_schedules(t)
     inputs = dataset_coordinator.next()
     inputs['beta'] = args.beta
-    trainer.distributed_train_step(inputs)
+    r = trainer.distributed_train_step(inputs)
+    print(r['encodings'])
 
     if t % valid_inc == 0:
 

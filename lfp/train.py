@@ -643,7 +643,7 @@ class LFPTrainer():
     @tf.function
     def distributed_train_step(self,inputs):
         per_replica_losses = self.strategy.run(self.train_step, kwargs=inputs)
-        print(per_replica_losses)
+        
         return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
 
