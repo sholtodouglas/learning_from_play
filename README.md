@@ -123,6 +123,10 @@
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
+## Acknowledgements
+
+Research supported with Cloud TPUs from Google's TPU Research Cloud (TRC)
+
 
 
 <!-- CONTACT -->
