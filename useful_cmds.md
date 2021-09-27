@@ -31,9 +31,13 @@ export PROJECT_ID=learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator-type=v3-8 --version=v2-alpha
 
-gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306
+gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306 -- -L 8888:localhost:8888
+
 
 gcloud alpha compute tpus tpu-vm delete lfp2 --zone=europe-west4-a
+
+wget https://repo.continuum.io/archive/Anaconda3-4.2.0-Linux-x86_64.sh
+bash Anaconda3-4.2.0-Linux-x86_64.sh
 
 
 
