@@ -33,6 +33,7 @@ gcloud alpha compute tpus tpu-vm create lfp1 --zone=europe-west4-a --accelerator
 
 gcloud alpha compute tpus tpu-vm ssh lfp1 --zone europe-west4-a --project learning-from-play-303306 -- -L 8888:localhost:8888
 
+gcloud alpha compute tpus tpu-vm scp --recurse lfp1:automated_diffusion/samples /Downloads --zone europe-west4-a --project learning-from-play-303306
 
 gcloud alpha compute tpus tpu-vm delete lfp2 --zone=europe-west4-a
 
